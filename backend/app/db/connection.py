@@ -1,7 +1,10 @@
+import logging
+
 from sqlalchemy import create_engine, text
 
 from app.db.config import settings
 
+logger = logging.getLogger(__name__)
 
 engine = create_engine(settings.database_url)
 
@@ -12,7 +15,7 @@ def test_connection() -> None:
             text("SELECT current_database()")
         ).scalar_one()
 
-        print(f"Conectado correctamente a: {database}")
+        logger.info("Database connection successful: %s", database)
 
 
 if __name__ == "__main__":
