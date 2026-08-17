@@ -82,13 +82,9 @@ def build_ranges_for_symbol(
 
     ranges: list[tuple[int | None, int | None]] = []
 
-    # 1. Forward sync (incremental update up to now)
+    # Incremental update: fetch from newest_ts to now_ms
     if newest_ts is not None and newest_ts < now_ms:
         ranges.append((newest_ts, now_ms))
-
-    # 2. Backward sync (backfill older history if any exists before oldest_ts)
-    if oldest_ts is not None:
-        ranges.append((None, oldest_ts - 1))
 
     return ranges
 

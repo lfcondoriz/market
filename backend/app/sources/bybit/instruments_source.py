@@ -1,6 +1,9 @@
+import logging
 from typing import Any
 
 from pybit.unified_trading import HTTP
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_instruments_from_bybit(
@@ -22,12 +25,22 @@ def fetch_instruments_from_bybit(
 
         response = client.get_instruments_info(**parameters)
 
-        if response["retCode"] != 0:
-            raise RuntimeError(response["retMsg"])
+        ret_code = response.get("retCode")
+        if ret_code != 0:
+            logger.error(
+                "Bybit API error fetching instruments for category=%s: retCode=%s retMsg=%s",
+                category,
+                ret_code,
+                response.get("retMsg"),
+            )
+            raise RuntimeError(
+                f"Bybit API error fetching instruments ({category}): {response.get('retMsg')}"
+            )
 
-        result = response["result"]
+        result = response.get("result") or {}
+        rows = result.get("list") or []
 
-        instruments.extend(result["list"])
+        instruments.extend(rows)
 
         cursor = result.get("nextPageCursor")
 
