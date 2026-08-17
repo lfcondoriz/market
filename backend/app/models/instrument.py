@@ -78,7 +78,7 @@ class Instrument(Base):
     risk_parameters: Mapped[dict | None] = mapped_column(JSONB)
 
     display_name: Mapped[str | None] = mapped_column(String(100))
-    symbol_type: Mapped[str | None] = mapped_column(String(50))
+    symbol_type: Mapped[str | None] = mapped_column(String(50), index=True)
     forbid_upl_withdrawal: Mapped[bool | None] = mapped_column(Boolean)
     symbol_id: Mapped[int | None] = mapped_column(Integer)
 

@@ -6,7 +6,7 @@ from pybit.unified_trading import HTTP
 
 logger = logging.getLogger(__name__)
 
-MAX_LIMIT_FUNDING_RATE = 200
+BYBIT_PAGE_SIZE = 200
 
 
 def fetch_get_funding_rate_history(
@@ -15,7 +15,7 @@ def fetch_get_funding_rate_history(
     symbol: str | None = None,
     start_time: int | None = None,
     end_time: int | None = None,
-    limit: int = MAX_LIMIT_FUNDING_RATE,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     all_data: list[dict[str, Any]] = []
 
@@ -25,10 +25,14 @@ def fetch_get_funding_rate_history(
     if start_time is not None and end_time is None:
         current_end_time = int(time.time() * 1000)
 
-    while len(all_data) < limit:
-        request_limit = min(limit - len(all_data), MAX_LIMIT_FUNDING_RATE)
-        if request_limit <= 0:
-            break
+    while True:
+        if limit is not None:
+            remaining = limit - len(all_data)
+            if remaining <= 0:
+                break
+            request_limit = min(remaining, BYBIT_PAGE_SIZE)
+        else:
+            request_limit = BYBIT_PAGE_SIZE
 
         response = client.get_funding_rate_history(
             category=category,
@@ -64,6 +68,9 @@ def fetch_get_funding_rate_history(
         next_end_time = oldest_timestamp - 1
 
         if current_end_time == next_end_time:
+            break
+
+        if current_start_time is not None and next_end_time <= current_start_time:
             break
 
         current_end_time = next_end_time

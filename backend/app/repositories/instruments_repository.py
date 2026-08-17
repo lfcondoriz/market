@@ -1,41 +1,35 @@
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.db.connection import engine
 from app.models.instrument import Instrument
+from app.repositories.base_repository import generic_upsert
 
 
-def upsert_instruments(values: list[dict[str, Any]]) -> int:
-    if not values:
-        return 0
-
-    statement = insert(Instrument).values(values)
-
-    excluded = statement.excluded
-
-    statement = statement.on_conflict_do_update(
+def upsert_instruments(
+    values: list[dict[str, Any]],
+    session: Session | None = None,
+) -> int:
+    return generic_upsert(
+        model_class=Instrument,
         index_elements=["category", "symbol"],
-        set_={
-            column.name: getattr(excluded, column.name)
-            for column in Instrument.__table__.columns
-            if column.name not in {"category", "symbol"}
-        },
-    ).returning(Instrument.symbol)
-
-    with Session(engine) as database:
-        result = database.execute(statement)
-        processed = len(result.all())
-        database.commit()
-
-    return processed
+        values=values,
+        session=session,
+    )
 
 
-def count_instruments(category: str) -> int:
-    with Session(engine) as database:
+def count_instruments(
+    category: str,
+    session: Session | None = None,
+) -> int:
+    def _execute(db: Session) -> int:
         query = select(func.count()).select_from(Instrument).where(Instrument.category == category)
-        return database.execute(query).scalar() or 0
+        return db.execute(query).scalar() or 0
 
+    if session is not None:
+        return _execute(session)
 
+    with Session(engine) as database:
+        return _execute(database)

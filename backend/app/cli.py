@@ -1,9 +1,12 @@
 import argparse
+import logging
 
 from app.db.create_tables import ensure_tables_exist
 from app.ingestion.funding_rates import ingest_funding_rates
 from app.ingestion.instruments import ingest_instruments
 from app.repositories.instruments_repository import count_instruments
+
+logger = logging.getLogger(__name__)
 
 SYMBOL_TYPES = [
     "innovation",
@@ -11,6 +14,7 @@ SYMBOL_TYPES = [
     "commodity",
     "uncategorized",
 ]
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,9 +105,9 @@ def ensure_instruments(category: str) -> None:
     if count > 0:
         return
 
-    print(
-        f"No instruments found for category '{category}'. "
-        "Initializing instruments..."
+    logger.info(
+        "No instruments found for category '%s'. Initializing instruments...",
+        category,
     )
 
     ingest_instruments(category=category)

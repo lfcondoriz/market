@@ -10,10 +10,7 @@ from app.models.funding_rate import FundingRate
 from app.models.instrument import Instrument
 from app.repositories.funding_rates_repository import upsert_funding_rates
 from app.sources.bybit.client import create_client
-from app.sources.bybit.funding_rates_source import (
-    MAX_LIMIT_FUNDING_RATE,
-    fetch_get_funding_rate_history,
-)
+from app.sources.bybit.funding_rates_source import fetch_get_funding_rate_history
 from app.transformations.funding_rates_transformer import (
     transform_funding_rate_list,
 )
@@ -55,10 +52,10 @@ def get_symbol_time_bounds(
             FundingRate.category == category,
             FundingRate.symbol == symbol,
         )
-        oldest_row, newest_row = database.execute(query).tuples().one()
+        oldest_dt, newest_dt = database.execute(query).tuples().one()
 
-    oldest = int(oldest_row.timestamp() * 1000) if oldest_row else None
-    newest = int(newest_row.timestamp() * 1000) if newest_row else None
+    oldest = int(oldest_dt.timestamp() * 1000) if oldest_dt else None
+    newest = int(newest_dt.timestamp() * 1000) if newest_dt else None
 
     return oldest, newest
 
@@ -73,19 +70,25 @@ def build_ranges_for_symbol(
     if start_time is not None or end_time is not None:
         return [(start_time, end_time)]
 
-    oldest_ts, newest_ts = get_symbol_time_bounds(category, symbol)
     now_ms = int(time.time() * 1000)
 
     if reset_history:
         return [(None, now_ms)]
+
+    oldest_ts, newest_ts = get_symbol_time_bounds(category, symbol)
 
     if oldest_ts is None and newest_ts is None:
         return [(None, now_ms)]
 
     ranges: list[tuple[int | None, int | None]] = []
 
+    # 1. Forward sync (incremental update up to now)
     if newest_ts is not None and newest_ts < now_ms:
         ranges.append((newest_ts, now_ms))
+
+    # 2. Backward sync (backfill older history if any exists before oldest_ts)
+    if oldest_ts is not None:
+        ranges.append((None, oldest_ts - 1))
 
     return ranges
 
@@ -96,7 +99,7 @@ def sync_symbol_funding_history(
     symbol: str,
     start_time: int | None = None,
     end_time: int | None = None,
-    limit: int = MAX_LIMIT_FUNDING_RATE,
+    limit: int | None = None,
     reset_history: bool = False,
 ) -> int:
     total_processed = 0
@@ -159,7 +162,7 @@ def ingest_funding_rates(
     symbol_type: str | None = None,
     start_time: int | None = None,
     end_time: int | None = None,
-    limit: int = MAX_LIMIT_FUNDING_RATE,
+    limit: int | None = None,
     reset_history: bool = False,
     client: HTTP | None = None,
 ) -> None:
@@ -177,7 +180,6 @@ def ingest_funding_rates(
         )
         return
 
-    # Reuse HTTP client instance across all symbol ingestions
     active_client = client or create_client()
 
     for symbol in symbols_to_sync:
