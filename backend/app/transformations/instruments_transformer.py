@@ -1,23 +1,6 @@
-from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Any
 
-
-def to_datetime(value: str | None) -> datetime | None:
-    if not value or value == "0":
-        return None
-
-    return datetime.fromtimestamp(
-        int(value) / 1000,
-        tz=timezone.utc,
-    )
-
-
-def to_decimal(value: str | None) -> Decimal | None:
-    if value in (None, ""):
-        return None
-
-    return Decimal(value)
+from app.transformations.utils import to_datetime, to_decimal
 
 
 def transform_instrument_record(

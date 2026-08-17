@@ -1,5 +1,6 @@
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -30,3 +31,11 @@ def upsert_instruments(values: list[dict[str, Any]]) -> int:
         database.commit()
 
     return processed
+
+
+def count_instruments(category: str) -> int:
+    with Session(engine) as database:
+        query = select(func.count()).select_from(Instrument).where(Instrument.category == category)
+        return database.execute(query).scalar() or 0
+
+

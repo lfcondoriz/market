@@ -4,6 +4,7 @@ from sqlalchemy import inspect
 
 from app.db.connection import engine
 from app.models.base import Base
+from app.models.funding_rate import FundingRate
 from app.models.instrument import Instrument
 
 logger = logging.getLogger(__name__)
