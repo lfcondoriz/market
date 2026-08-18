@@ -4,6 +4,7 @@ import logging
 from app.db.create_tables import ensure_tables_exist
 from app.ingestion.funding_rates import ingest_funding_rates
 from app.ingestion.instruments import ingest_instruments
+from app.ingestion.klines import ingest_klines
 from app.repositories.instruments_repository import count_instruments
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,6 @@ SYMBOL_TYPES = [
     "commodity",
     "uncategorized",
 ]
-
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,8 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Bybit category to process.",
     )
 
-    target_group = parser_funding.add_mutually_exclusive_group(required=True)
-    target_group.add_argument(
+    funding_target_group = parser_funding.add_mutually_exclusive_group(required=True)
+    funding_target_group.add_argument(
         "--symbol",
         nargs="+",
         help=(
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Example: BTCUSDT ETHUSDT."
         ),
     )
-    target_group.add_argument(
+    funding_target_group.add_argument(
         "--all",
         action="store_true",
         help="Ingest funding rates for all eligible symbols.",
@@ -84,6 +84,55 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # ------------------------------------------------------------------
+    # Subcommand: klines
+    # ------------------------------------------------------------------
+    parser_klines = subparsers.add_parser(
+        "klines",
+        help="Ingest candlestick (Kline) market data.",
+    )
+    parser_klines.add_argument(
+        "--category",
+        required=True,
+        help="Bybit category to process.",
+    )
+
+    klines_target_group = parser_klines.add_mutually_exclusive_group(required=True)
+    klines_target_group.add_argument(
+        "--symbol",
+        nargs="+",
+        help=(
+            "One or more symbols to ingest klines for. "
+            "Example: BTCUSDT ETHUSDT."
+        ),
+    )
+    klines_target_group.add_argument(
+        "--all",
+        action="store_true",
+        help="Ingest klines for all eligible symbols.",
+    )
+
+    parser_klines.add_argument(
+        "--interval",
+        default="1",
+        help=(
+            "Kline interval (e.g. 1, 3, 5, 15, 30, 60, 120, 240, 360, 720, D, M, W). "
+            "Default: 1."
+        ),
+    )
+
+    parser_klines.add_argument(
+        "--symbol-type",
+        choices=SYMBOL_TYPES,
+        help="Filter symbols by Bybit symbol type when using --all.",
+    )
+
+    parser_klines.add_argument(
+        "--reset-history",
+        action="store_true",
+        help="Force a full historical backfill for the selected kline symbols.",
+    )
+
     return parser
 
 
@@ -91,7 +140,7 @@ def validate_args(
     parser: argparse.ArgumentParser,
     args: argparse.Namespace,
 ) -> None:
-    if args.command == "funding":
+    if args.command in ("funding", "klines"):
         if args.symbol_type and not args.all:
             parser.error("--symbol-type can only be used with --all")
 
@@ -141,6 +190,29 @@ def run_funding(args: argparse.Namespace) -> None:
     )
 
 
+def run_klines(args: argparse.Namespace) -> None:
+    """
+    Run klines ingestion after ensuring its prerequisites.
+    """
+    ensure_instruments(category=args.category)
+
+    if args.symbol:
+        ingest_klines(
+            category=args.category,
+            symbols=args.symbol,
+            interval=args.interval,
+            reset_history=args.reset_history,
+        )
+        return
+
+    ingest_klines(
+        category=args.category,
+        symbol_type=args.symbol_type,
+        interval=args.interval,
+        reset_history=args.reset_history,
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -155,6 +227,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.command == "funding":
         run_funding(args)
+        return
+
+    if args.command == "klines":
+        run_klines(args)
         return
 
 

@@ -4,6 +4,7 @@ from app.db.connection import engine
 from app.models.base import Base
 from app.models.funding_rate import FundingRate  # noqa: F401
 from app.models.instrument import Instrument  # noqa: F401
+from app.models.kline import Kline  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
