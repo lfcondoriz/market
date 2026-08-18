@@ -4,6 +4,7 @@ from pybit.unified_trading import HTTP
 
 from app.sources.bybit.funding_rates_source import fetch_get_funding_rate_history
 from app.sources.bybit.instruments_source import fetch_instruments_from_bybit
+from app.sources.bybit.klines_source import fetch_get_kline
 
 
 class BybitMarketClient:
@@ -38,6 +39,25 @@ class BybitMarketClient:
             client=self.http_client,
             category=category,
             symbol=symbol,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+        )
+
+    def fetch_klines(
+        self,
+        symbol: str,
+        category: str = "linear",
+        interval: str = "1",
+        start_time: int | None = None,
+        end_time: int | None = None,
+        limit: int | None = None,
+    ) -> list[list[str]]:
+        return fetch_get_kline(
+            client=self.http_client,
+            symbol=symbol,
+            category=category,
+            interval=interval,
             start_time=start_time,
             end_time=end_time,
             limit=limit,
