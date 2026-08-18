@@ -162,6 +162,7 @@ uv run uvicorn app.api.main:app --reload
 | `GET` | `/api/v1/instruments/{symbol}` | Especificaciones técnicas y metadatos del contrato |
 | `GET` | `/api/v1/funding-rates/summary` | Resumen de mercado: Top tasas positivas/negativas y APR estimado |
 | `GET` | `/api/v1/funding-rates/{symbol}` | Histórico de tasas de fondeo formateado para gráficos |
+| `GET` | `/api/v1/klines/{symbol}` | Histórico de velas (OHLCV) formateado para gráficos por intervalo |
 
 ---
 
