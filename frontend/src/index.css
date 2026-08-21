@@ -958,6 +958,20 @@ html, body, #root {
   overflow-y: auto;
 }
 
+.focused-symbol-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: var(--bg-active-subtle);
+  border: 1px solid var(--accent-blue);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
+}
+
 .compare-legend-card {
   display: flex;
   flex-direction: column;
@@ -967,11 +981,30 @@ html, body, #root {
   padding: 5px 8px;
   min-width: 140px;
   gap: 2px;
-  transition: opacity 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.compare-legend-card:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.compare-legend-card.focused {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 10px rgba(41, 98, 255, 0.3);
 }
 
 .compare-legend-card.dimmed {
-  opacity: 0.4;
+  opacity: 0.35;
+}
+
+.focused-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .legend-sym-row {

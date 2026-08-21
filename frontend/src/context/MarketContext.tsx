@@ -51,6 +51,8 @@ interface MarketContextType {
 
   // Comparison State & Actions
   compareItems: CompareItemState[];
+  focusedSymbol: string | null;
+  setFocusedSymbol: (symbol: string | null) => void;
   addCompareSymbol: (symbol: string) => void;
   removeCompareSymbol: (symbol: string) => void;
   toggleCompareVisibility: (symbol: string) => void;
@@ -80,6 +82,9 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [subChartHeight, setSubChartHeight] = useState<number>(190);
   const [showWatchlist, setShowWatchlist] = useState<boolean>(true);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+
+  // Focused Symbol in Comparison View
+  const [focusedSymbol, setFocusedSymbol] = useState<string | null>(null);
 
   // Catalog State
   const [instruments, setInstruments] = useState<InstrumentItem[]>([]);
@@ -142,12 +147,25 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [activeSymbol]);
 
-  const setActiveSymbol = useCallback((symbol: string) => {
-    setActiveSymbolState(symbol.toUpperCase());
-    if (activeTab === 'scanner') {
-      setActiveTab('chart');
-    }
-  }, [activeTab]);
+  // Unified symbol selection handler (Click = View single symbol exclusively)
+  const setActiveSymbol = useCallback(
+    (symbol: string) => {
+      const sym = symbol.toUpperCase();
+      setActiveSymbolState(sym);
+      setFocusedSymbol(sym);
+
+      if (activeTab === 'compare') {
+        // When clicking a symbol, show ONLY this single symbol (clean replace)
+        const singleList: CompareItemState[] = [
+          { symbol: sym, color: OVERLAY_LINE_COLORS[0], visible: true },
+        ];
+        persistCompareItems(singleList);
+      } else if (activeTab === 'scanner') {
+        setActiveTab('chart');
+      }
+    },
+    [activeTab]
+  );
 
   const toggleSubChart = useCallback(() => setShowSubChart((prev) => !prev), []);
   const toggleWatchlist = useCallback(() => setShowWatchlist((prev) => !prev), []);
@@ -187,34 +205,36 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     [instruments]
   );
 
-  // Comparison Actions
+  // Comparison Actions (Superimpose / Multi-Asset)
   const addCompareSymbol = useCallback(
     (symbol: string) => {
       const sym = symbol.toUpperCase();
-      if (compareItems.some((item) => item.symbol === sym)) {
-        // If already in list but hidden, make it visible
-        persistCompareItems(
-          compareItems.map((item) =>
+      setFocusedSymbol(sym);
+      setCompareItems((prev) => {
+        let updated: CompareItemState[];
+        if (prev.some((item) => item.symbol === sym)) {
+          updated = prev.map((item) =>
             item.symbol === sym ? { ...item, visible: true } : item
-          )
-        );
-        return;
-      }
-      const nextColor =
-        OVERLAY_LINE_COLORS[compareItems.length % OVERLAY_LINE_COLORS.length];
-      const newItem: CompareItemState = {
-        symbol: sym,
-        color: nextColor,
-        visible: true,
-      };
-      persistCompareItems([...compareItems, newItem]);
+          );
+        } else {
+          const nextColor =
+            OVERLAY_LINE_COLORS[prev.length % OVERLAY_LINE_COLORS.length];
+          updated = [...prev, { symbol: sym, color: nextColor, visible: true }];
+        }
+        try {
+          localStorage.setItem('market_compare_items', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
     },
-    [compareItems]
+    []
   );
 
   const removeCompareSymbol = useCallback(
     (symbol: string) => {
-      persistCompareItems(compareItems.filter((item) => item.symbol !== symbol.toUpperCase()));
+      const sym = symbol.toUpperCase();
+      persistCompareItems(compareItems.filter((item) => item.symbol !== sym));
+      setFocusedSymbol((prev) => (prev === sym ? null : prev));
     },
     [compareItems]
   );
@@ -256,7 +276,7 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
       });
 
-      // Take top 15 symbols for high performance
+      // Take top 15 symbols for optimal performance
       const selected = filtered.slice(0, 15).map((inst, index) => ({
         symbol: inst.symbol,
         color: OVERLAY_LINE_COLORS[index % OVERLAY_LINE_COLORS.length],
@@ -264,12 +284,14 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }));
 
       persistCompareItems(selected);
+      setFocusedSymbol(selected.length > 0 ? selected[0].symbol : null);
     },
     [instruments]
   );
 
   const clearCompare = useCallback(() => {
     persistCompareItems([]);
+    setFocusedSymbol(null);
   }, []);
 
   const value = useMemo(
@@ -301,6 +323,8 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       filterInstruments,
 
       compareItems,
+      focusedSymbol,
+      setFocusedSymbol,
       addCompareSymbol,
       removeCompareSymbol,
       toggleCompareVisibility,
@@ -329,6 +353,7 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       closeSearch,
       filterInstruments,
       compareItems,
+      focusedSymbol,
       addCompareSymbol,
       removeCompareSymbol,
       toggleCompareVisibility,

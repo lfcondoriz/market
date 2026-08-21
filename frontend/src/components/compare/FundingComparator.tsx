@@ -19,6 +19,7 @@ import {
   Trash2,
   CheckSquare,
   Square,
+  Sparkles,
 } from 'lucide-react';
 import { useMarket } from '../../context/MarketContext';
 import { useMultiFundingRates } from '../../hooks/useMultiFundingRates';
@@ -27,6 +28,8 @@ import { formatFundingPct, isWeekendTimestamp } from '../../utils/formatters';
 export const FundingComparator: React.FC = () => {
   const {
     compareItems,
+    focusedSymbol,
+    setFocusedSymbol,
     addCompareSymbol,
     removeCompareSymbol,
     toggleCompareVisibility,
@@ -109,7 +112,7 @@ export const FundingComparator: React.FC = () => {
     };
   }, []);
 
-  // Update Series when multi-funding data, visibility or weekend toggle updates
+  // Update Series when multi-funding data, visibility, focus, or weekend toggle updates
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -132,10 +135,12 @@ export const FundingComparator: React.FC = () => {
       let series = currentMap.get(item.symbol);
       let markers = currentMarkersMap.get(item.symbol);
 
+      const isFocused = focusedSymbol === item.symbol;
+
       if (!series) {
         series = chart.addSeries(LineSeries, {
           color: item.color,
-          lineWidth: 2,
+          lineWidth: isFocused ? 4 : 2,
           priceFormat: {
             type: 'custom',
             formatter: (val: number) => `${val.toFixed(4)}%`,
@@ -146,10 +151,11 @@ export const FundingComparator: React.FC = () => {
         currentMarkersMap.set(item.symbol, markers);
       }
 
-      // Dynamic Visibility Toggle
+      // Dynamic Visibility and Line Thickness Toggle based on Focus
       series.applyOptions({
         visible: item.visible,
         color: item.color,
+        lineWidth: isFocused ? 4 : 2,
       });
 
       const formattedData = item.data.map((d) => ({
@@ -168,7 +174,7 @@ export const FundingComparator: React.FC = () => {
             position: 'inBar' as const,
             shape: 'circle' as const,
             color: item.color,
-            size: 1,
+            size: isFocused ? 2 : 1,
           }));
         markers.setMarkers(weekendMarkers);
       } else if (markers) {
@@ -177,7 +183,7 @@ export const FundingComparator: React.FC = () => {
     });
 
     chart.timeScale().fitContent();
-  }, [seriesList, compareItems, showWeekendDots]);
+  }, [seriesList, compareItems, focusedSymbol, showWeekendDots]);
 
   // Drag and Drop (Dropping an asset into the comparator adds it)
   const handleDragOver = (e: React.DragEvent) => {
@@ -219,8 +225,17 @@ export const FundingComparator: React.FC = () => {
         <div className="compare-title-row">
           <div className="compare-title">
             <LineChart size={16} color="var(--accent-blue)" />
-            <span>Comparador Superpuesto de Funding Rates</span>
-            <span className="watchlist-count">({compareItems.length} activos)</span>
+            <span>
+              {compareItems.length === 1
+                ? `Funding Rate (${compareItems[0].symbol})`
+                : `Comparativa de Funding (${compareItems.length} activos superpuestos)`}
+            </span>
+            {compareItems.length > 1 && focusedSymbol && (
+              <span className="focused-symbol-badge">
+                <Sparkles size={11} />
+                <span>Enfocado: {focusedSymbol}</span>
+              </span>
+            )}
           </div>
 
           <div className="compare-actions">
@@ -334,65 +349,81 @@ export const FundingComparator: React.FC = () => {
           </div>
         </div>
 
-        {/* Multi-Asset Legend Chips with Visibility Toggles */}
+        {/* Multi-Asset Legend Chips with Visibility Toggles & Focus */}
         <div className="compare-legend-chips">
-          {seriesList.map((item) => (
-            <div
-              key={item.symbol}
-              className={`compare-legend-card ${!item.visible ? 'dimmed' : ''}`}
-              style={{
-                borderLeft: `3px solid ${item.visible ? item.color : 'var(--text-muted)'}`,
-              }}
-            >
-              <div className="legend-sym-row">
-                <div className="legend-sym-info">
-                  <button
-                    className="legend-eye-btn"
-                    onClick={() => toggleCompareVisibility(item.symbol)}
-                    title={item.visible ? 'Ocultar curva en el gráfico' : 'Mostrar curva en el gráfico'}
-                  >
-                    {item.visible ? (
-                      <Eye size={13} color={item.color} />
-                    ) : (
-                      <EyeOff size={13} color="var(--text-muted)" />
+          {seriesList.map((item) => {
+            const isFocused = focusedSymbol === item.symbol;
+            return (
+              <div
+                key={item.symbol}
+                className={`compare-legend-card ${!item.visible ? 'dimmed' : ''} ${
+                  isFocused ? 'focused' : ''
+                }`}
+                style={{
+                  borderLeft: `3px solid ${item.visible ? item.color : 'var(--text-muted)'}`,
+                }}
+                onClick={() => setFocusedSymbol(isFocused ? null : item.symbol)}
+                title={isFocused ? 'Activo enfocado (clic para desenfocar)' : 'Clic para enfocar esta línea'}
+              >
+                <div className="legend-sym-row">
+                  <div className="legend-sym-info">
+                    <button
+                      className="legend-eye-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCompareVisibility(item.symbol);
+                      }}
+                      title={item.visible ? 'Ocultar curva en el gráfico' : 'Mostrar curva en el gráfico'}
+                    >
+                      {item.visible ? (
+                        <Eye size={13} color={item.color} />
+                      ) : (
+                        <EyeOff size={13} color="var(--text-muted)" />
+                      )}
+                    </button>
+                    <span
+                      className="legend-sym-name"
+                      style={{ color: item.visible ? 'var(--text-bright)' : 'var(--text-muted)' }}
+                    >
+                      {item.symbol}
+                    </span>
+                    {isFocused && (
+                      <span className="focused-indicator-dot" style={{ backgroundColor: item.color }} />
                     )}
-                  </button>
-                  <span
-                    className="legend-sym-name"
-                    style={{ color: item.visible ? 'var(--text-bright)' : 'var(--text-muted)' }}
+                  </div>
+
+                  <button
+                    className="legend-remove-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeCompareSymbol(item.symbol);
+                    }}
+                    title="Quitar de la comparativa"
                   >
-                    {item.symbol}
-                  </span>
+                    <X size={12} />
+                  </button>
                 </div>
 
-                <button
-                  className="legend-remove-btn"
-                  onClick={() => removeCompareSymbol(item.symbol)}
-                  title="Quitar de la comparativa"
-                >
-                  <X size={12} />
-                </button>
+                <div className="legend-stats-row">
+                  <span
+                    className="legend-pct"
+                    style={{
+                      color: !item.visible
+                        ? 'var(--text-muted)'
+                        : (item.latestPct || 0) >= 0
+                        ? 'var(--bull-green)'
+                        : 'var(--bear-red)',
+                    }}
+                  >
+                    {formatFundingPct(item.latestPct)}
+                  </span>
+                  <span className="legend-apr">
+                    APR: {(item.latestApr || 0).toFixed(2)}%
+                  </span>
+                </div>
               </div>
-
-              <div className="legend-stats-row">
-                <span
-                  className="legend-pct"
-                  style={{
-                    color: !item.visible
-                      ? 'var(--text-muted)'
-                      : (item.latestPct || 0) >= 0
-                      ? 'var(--bull-green)'
-                      : 'var(--bear-red)',
-                  }}
-                >
-                  {formatFundingPct(item.latestPct)}
-                </span>
-                <span className="legend-apr">
-                  APR: {(item.latestApr || 0).toFixed(2)}%
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
