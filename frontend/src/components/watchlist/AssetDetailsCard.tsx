@@ -1,5 +1,5 @@
 import React from 'react';
-import type { InstrumentItem } from '../types';
+import type { InstrumentItem } from '../../types';
 
 interface AssetDetailsCardProps {
   instrument: InstrumentItem | null;
@@ -14,17 +14,7 @@ export const AssetDetailsCard: React.FC<AssetDetailsCardProps> = ({
     <div className="asset-details-card">
       <div className="card-header-row">
         <span className="card-symbol">{currentSymbol}</span>
-        <span
-          style={{
-            fontSize: '11px',
-            padding: '2px 6px',
-            borderRadius: '3px',
-            backgroundColor: 'rgba(8, 153, 129, 0.15)',
-            color: 'var(--bull-green)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-          }}
-        >
+        <span className="card-status-badge">
           {instrument?.status || 'TRADING'}
         </span>
       </div>

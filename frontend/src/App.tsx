@@ -1,105 +1,41 @@
-import React, { useEffect, useState } from 'react';
-import { TopBar } from './components/TopBar';
-import { SearchModal } from './components/SearchModal';
-import { CandleChart } from './components/CandleChart';
-import { SubChartPane } from './components/SubChartPane';
-import { Watchlist } from './components/Watchlist';
-import { FundingScanner } from './components/FundingScanner';
-import {
-  fetchFundingRateHistory,
-  fetchInstrumentDetail,
-  fetchInstruments,
-  fetchKlines,
-} from './services/api';
-import type {
-  FundingRatePoint,
-  InstrumentItem,
-  KlinePoint,
-  Timeframe,
-} from './types';
+import React, { useState } from 'react';
+import { TopBar, type ActiveTabMode } from './components/common/TopBar';
+import { SearchModal } from './components/common/SearchModal';
+import { CandleChart } from './components/chart/CandleChart';
+import { SubChartPane } from './components/chart/SubChartPane';
+import { Watchlist } from './components/watchlist/Watchlist';
+import { FundingScanner } from './components/scanner/FundingScanner';
+import { FundingComparator } from './components/compare/FundingComparator';
+import { useInstruments } from './hooks/useInstruments';
+import { useKlines } from './hooks/useKlines';
+import { useFundingRates } from './hooks/useFundingRates';
+import type { Timeframe } from './types';
 
 export const App: React.FC = () => {
-  // State
+  // Navigation & Active Symbol State
   const [currentSymbol, setCurrentSymbol] = useState<string>('BTCUSDT');
   const [category] = useState<string>('linear');
   const [timeframe, setTimeframe] = useState<Timeframe>('1');
-  const [activeTab, setActiveTab] = useState<'chart' | 'scanner'>('chart');
+  const [activeTab, setActiveTab] = useState<ActiveTabMode>('chart');
+
+  // UI Panels State
   const [showSubChart, setShowSubChart] = useState<boolean>(true);
   const [subChartHeight, setSubChartHeight] = useState<number>(190);
   const [showWatchlist, setShowWatchlist] = useState<boolean>(true);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
 
-  // Data State
-  const [instruments, setInstruments] = useState<InstrumentItem[]>([]);
-  const [activeInstrument, setActiveInstrument] = useState<InstrumentItem | null>(null);
-  const [klines, setKlines] = useState<KlinePoint[]>([]);
-  const [fundingRates, setFundingRates] = useState<FundingRatePoint[]>([]);
+  // Custom Hooks for Data Fetching & Lifecycle
+  const { instruments, loading: loadingInstruments } = useInstruments('linear');
+  const { klines, loading: loadingKlines } = useKlines(currentSymbol, timeframe, 'linear');
+  const { fundingRates, loading: loadingFunding } = useFundingRates(
+    currentSymbol,
+    'linear',
+    showSubChart
+  );
 
-  // Loading & Error states
-  const [loadingKlines, setLoadingKlines] = useState<boolean>(false);
-  const [loadingFunding, setLoadingFunding] = useState<boolean>(false);
-  const [loadingInstruments, setLoadingInstruments] = useState<boolean>(true);
-
-  // 1. Load instruments catalog on mount
-  useEffect(() => {
-    const loadInstruments = async () => {
-      try {
-        setLoadingInstruments(true);
-        const list = await fetchInstruments('linear');
-        setInstruments(list);
-      } catch (err) {
-        console.error('Error loading instruments:', err);
-      } finally {
-        setLoadingInstruments(false);
-      }
-    };
-    loadInstruments();
-  }, []);
-
-  // 2. Load active instrument metadata
-  useEffect(() => {
-    const loadDetail = async () => {
-      const detail = await fetchInstrumentDetail(currentSymbol);
-      setActiveInstrument(detail);
-    };
-    loadDetail();
-  }, [currentSymbol]);
-
-  // 3. Load Klines for current symbol & timeframe
-  useEffect(() => {
-    const loadKlines = async () => {
-      try {
-        setLoadingKlines(true);
-        const res = await fetchKlines(currentSymbol, timeframe, 'linear', 1000);
-        setKlines(res.data || []);
-      } catch (err) {
-        console.error(`Error loading klines for ${currentSymbol}:`, err);
-        setKlines([]);
-      } finally {
-        setLoadingKlines(false);
-      }
-    };
-    loadKlines();
-  }, [currentSymbol, timeframe]);
-
-  // 4. Load Funding Rate History for sub-chart
-  useEffect(() => {
-    if (!showSubChart) return;
-
-    const loadFunding = async () => {
-      try {
-        setLoadingFunding(true);
-        const res = await fetchFundingRateHistory(currentSymbol, 'linear', 500);
-        setFundingRates(res.data || []);
-      } catch (err) {
-        console.error(`Error loading funding rates for ${currentSymbol}:`, err);
-        setFundingRates([]);
-      } finally {
-        setLoadingFunding(false);
-      }
-    };
-    loadFunding();
-  }, [currentSymbol, showSubChart]);
+  // Find active instrument metadata
+  const activeInstrument =
+    instruments.find((inst) => inst.symbol.toUpperCase() === currentSymbol.toUpperCase()) || null;
 
   const handleSelectSymbol = (symbol: string) => {
     setCurrentSymbol(symbol.toUpperCase());
@@ -110,10 +46,11 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* Top Header Bar */}
+      {/* Top Navigation Header */}
       <TopBar
         currentSymbol={currentSymbol}
         category={category}
+        symbolType={activeInstrument?.symbol_type}
         timeframe={timeframe}
         onTimeframeChange={setTimeframe}
         onOpenSearch={() => setIsSearchOpen(true)}
@@ -127,7 +64,7 @@ export const App: React.FC = () => {
 
       {/* Main Workspace Layout */}
       <div className="workspace-layout">
-        {activeTab === 'chart' ? (
+        {activeTab === 'chart' && (
           <main className="main-chart-area">
             {/* Primary Candlestick Chart */}
             <CandleChart
@@ -138,7 +75,7 @@ export const App: React.FC = () => {
               loading={loadingKlines}
             />
 
-            {/* Sub-panel: Synchronized Funding Rate Chart (Resizable) */}
+            {/* Sub-panel: Synchronized Funding Rate Chart (Resizable & Weekend Coloring) */}
             {showSubChart && (
               <SubChartPane
                 symbol={currentSymbol}
@@ -150,12 +87,20 @@ export const App: React.FC = () => {
               />
             )}
           </main>
-        ) : (
-          /* Market Overview / Funding Scanner View */
+        )}
+
+        {activeTab === 'compare' && (
+          <FundingComparator
+            instruments={instruments}
+            onSelectSymbolForChart={handleSelectSymbol}
+          />
+        )}
+
+        {activeTab === 'scanner' && (
           <FundingScanner onSelectSymbol={handleSelectSymbol} />
         )}
 
-        {/* Right Watchlist Sidebar */}
+        {/* Right Watchlist Sidebar (with ETF support & non-clipping flexbox) */}
         {showWatchlist && (
           <Watchlist
             instruments={instruments}
@@ -168,7 +113,7 @@ export const App: React.FC = () => {
         )}
       </div>
 
-      {/* Global Quick Search Modal */}
+      {/* Global Quick Search Modal (Ctrl + K) */}
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}

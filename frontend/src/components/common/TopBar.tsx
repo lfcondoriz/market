@@ -3,39 +3,35 @@ import {
   Search,
   CandlestickChart,
   TableProperties,
+  LineChart,
   PanelRightClose,
   PanelRightOpen,
   Activity,
 } from 'lucide-react';
-import type { Timeframe } from '../types';
+import { TIMEFRAME_OPTIONS } from '../../constants/timeframes';
+import type { Timeframe } from '../../types';
+
+export type ActiveTabMode = 'chart' | 'compare' | 'scanner';
 
 interface TopBarProps {
   currentSymbol: string;
   category: string;
+  symbolType?: string;
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
   onOpenSearch: () => void;
-  activeTab: 'chart' | 'scanner';
-  onTabChange: (tab: 'chart' | 'scanner') => void;
+  activeTab: ActiveTabMode;
+  onTabChange: (tab: ActiveTabMode) => void;
   showSubChart: boolean;
   onToggleSubChart: () => void;
   showWatchlist: boolean;
   onToggleWatchlist: () => void;
 }
 
-const TIMEFRAMES: { label: string; value: Timeframe }[] = [
-  { label: '1m', value: '1' },
-  { label: '5m', value: '5' },
-  { label: '15m', value: '15' },
-  { label: '1h', value: '60' },
-  { label: '4h', value: '240' },
-  { label: '1D', value: 'D' },
-  { label: '1W', value: 'W' },
-];
-
 export const TopBar: React.FC<TopBarProps> = ({
   currentSymbol,
   category,
+  symbolType,
   timeframe,
   onTimeframeChange,
   onOpenSearch,
@@ -50,22 +46,26 @@ export const TopBar: React.FC<TopBarProps> = ({
     <header className="topbar">
       <div className="topbar-left">
         {/* Symbol Search Trigger Button */}
-        <button className="symbol-button" onClick={onOpenSearch}>
+        <button className="symbol-button" onClick={onOpenSearch} title="Buscar activo (Ctrl + K)">
           <Search size={15} color="var(--text-secondary)" />
-          <span>{currentSymbol}</span>
+          <span className="symbol-name">{currentSymbol}</span>
           <span className="symbol-category-badge">{category}</span>
+          {symbolType && symbolType !== 'uncategorized' && (
+            <span className="symbol-type-badge">{symbolType}</span>
+          )}
         </button>
 
         <div className="topbar-divider" />
 
-        {/* Timeframe Selector Group */}
+        {/* Timeframe Selector Group (Shown in chart mode) */}
         {activeTab === 'chart' && (
           <div className="timeframe-group">
-            {TIMEFRAMES.map((tf) => (
+            {TIMEFRAME_OPTIONS.map((tf) => (
               <button
                 key={tf.value}
                 className={`tf-btn ${timeframe === tf.value ? 'active' : ''}`}
                 onClick={() => onTimeframeChange(tf.value)}
+                title={tf.description}
               >
                 {tf.label}
               </button>
@@ -81,7 +81,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             className={`tab-btn ${showSubChart ? 'active' : ''}`}
             onClick={onToggleSubChart}
             title="Mostrar / Ocultar Subgráfico de Funding Rate"
-            style={{ padding: '5px 9px' }}
           >
             <Activity size={14} color={showSubChart ? 'var(--accent-blue)' : 'var(--text-secondary)'} />
             <span>Funding Rate Subpanel</span>
@@ -90,8 +89,8 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Center/Right Tabs & Watchlist Toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div className="topbar-tabs">
+      <div className="topbar-right">
+        <nav className="topbar-tabs">
           <button
             className={`tab-btn ${activeTab === 'chart' ? 'active' : ''}`}
             onClick={() => onTabChange('chart')}
@@ -99,23 +98,30 @@ export const TopBar: React.FC<TopBarProps> = ({
             <CandlestickChart size={14} />
             <span>Gráfico</span>
           </button>
+
+          <button
+            className={`tab-btn ${activeTab === 'compare' ? 'active' : ''}`}
+            onClick={() => onTabChange('compare')}
+            title="Superponer y comparar Funding Rates entre varios activos"
+          >
+            <LineChart size={14} />
+            <span>Comparador Funding</span>
+          </button>
+
           <button
             className={`tab-btn ${activeTab === 'scanner' ? 'active' : ''}`}
             onClick={() => onTabChange('scanner')}
+            title="Escaner de oportunidades de Funding Rate y APR"
           >
             <TableProperties size={14} />
             <span>Funding Scanner</span>
           </button>
-        </div>
+        </nav>
 
         <button
           onClick={onToggleWatchlist}
           className={`tab-btn ${showWatchlist ? 'active' : ''}`}
-          style={{
-            padding: '5px 9px',
-            gap: '6px',
-          }}
-          title={showWatchlist ? 'Ocultar Watchlist (Lista de seguimiento)' : 'Mostrar Watchlist (Lista de seguimiento)'}
+          title={showWatchlist ? 'Ocultar Watchlist' : 'Mostrar Watchlist'}
         >
           {showWatchlist ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
           <span>Watchlist</span>

@@ -64,3 +64,14 @@ export interface MarketSummaryResponse {
   top_positive: FundingRateSummaryItem[];
   top_negative: FundingRateSummaryItem[];
 }
+
+export interface CompareSeriesItem {
+  symbol: string;
+  color: string;
+  data: FundingRatePoint[];
+  loading: boolean;
+  latestPct?: number;
+  latestApr?: number;
+}
+
+export type FundingVisualizationMode = 'area' | 'weekend-highlight' | 'bars';

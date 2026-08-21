@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, X, TrendingUp } from 'lucide-react';
-import type { InstrumentItem } from '../types';
+import { CATEGORY_FILTERS, type AssetCategoryFilter } from '../../constants/categories';
+import type { InstrumentItem } from '../../types';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -16,12 +17,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   instruments,
 }) => {
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<AssetCategoryFilter>('all');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setQuery('');
+      setCategoryFilter('all');
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
@@ -29,12 +32,33 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filtered = instruments.filter(
-    (inst) =>
-      inst.symbol.toLowerCase().includes(query.toLowerCase()) ||
-      (inst.base_coin && inst.base_coin.toLowerCase().includes(query.toLowerCase())) ||
-      (inst.display_name && inst.display_name.toLowerCase().includes(query.toLowerCase()))
-  ).slice(0, 30);
+  const filtered = instruments
+    .filter((inst) => {
+      const q = query.toLowerCase().trim();
+      const matchesQuery =
+        !q ||
+        inst.symbol.toLowerCase().includes(q) ||
+        (inst.base_coin && inst.base_coin.toLowerCase().includes(q)) ||
+        (inst.display_name && inst.display_name.toLowerCase().includes(q));
+
+      if (!matchesQuery) return false;
+
+      const symType = inst.symbol_type?.toLowerCase() || '';
+      switch (categoryFilter) {
+        case 'crypto':
+          return !symType || symType === 'uncategorized' || symType === 'innovation';
+        case 'stock':
+          return symType === 'stock';
+        case 'etf':
+          return symType === 'etf';
+        case 'commodity':
+          return symType === 'commodity';
+        case 'all':
+        default:
+          return true;
+      }
+    })
+    .slice(0, 40);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -56,31 +80,48 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="search-modal" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
+      <div
+        className="search-modal"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+      >
         <div className="search-modal-header">
           <Search size={18} color="var(--text-secondary)" />
           <input
             ref={inputRef}
             type="text"
             className="search-modal-input"
-            placeholder="Buscar símbolo (ej. BTC, ETH, AAL, MARA)..."
+            placeholder="Buscar activo por ticker o nombre (ej. BTC, AAL, MARA, ARKK)..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
           />
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-          >
+          <button className="icon-btn" onClick={onClose} title="Cerrar (Esc)">
             <X size={18} />
           </button>
         </div>
 
+        {/* Filter chips inside search modal */}
+        <div className="search-modal-categories">
+          {CATEGORY_FILTERS.map((cat) => (
+            <button
+              key={cat.id}
+              className={`chip-btn ${categoryFilter === cat.id ? 'active' : ''}`}
+              onClick={() => {
+                setCategoryFilter(cat.id);
+                setSelectedIndex(0);
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
         <div className="search-modal-results">
           {filtered.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div className="empty-state-message">
               No se encontraron instrumentos para "{query}"
             </div>
           ) : (
@@ -93,58 +134,23 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   onClose();
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 4,
-                      backgroundColor: 'rgba(41, 98, 255, 0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--accent-blue)',
-                    }}
-                  >
+                <div className="search-item-info">
+                  <div className="search-item-icon">
                     <TrendingUp size={16} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-bright)', fontSize: '13px' }}>
-                      {inst.symbol}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    <div className="search-item-symbol">{inst.symbol}</div>
+                    <div className="search-item-name">
                       {inst.display_name || `${inst.base_coin} / ${inst.quote_coin}`}
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div className="search-item-tags">
                   {inst.symbol_type && (
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        padding: '2px 6px',
-                        borderRadius: 3,
-                        backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      {inst.symbol_type}
-                    </span>
+                    <span className="badge-tag badge-type">{inst.symbol_type}</span>
                   )}
-                  <span
-                    style={{
-                      fontSize: '10px',
-                      padding: '2px 6px',
-                      borderRadius: 3,
-                      backgroundColor: 'rgba(41, 98, 255, 0.15)',
-                      color: 'var(--accent-blue)',
-                      textTransform: 'uppercase',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {inst.category}
-                  </span>
+                  <span className="badge-tag badge-cat">{inst.category}</span>
                 </div>
               </div>
             ))

@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   createChart,
   AreaSeries,
+  HistogramSeries,
   ColorType,
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { X, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
-import type { FundingRatePoint } from '../types';
+import { X, TrendingUp, Maximize2, Minimize2, Calendar } from 'lucide-react';
+import { isWeekendTimestamp, formatFundingPct } from '../../utils/formatters';
+import type { FundingRatePoint } from '../../types';
 
 interface SubChartPaneProps {
   symbol: string;
@@ -31,9 +33,12 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const areaSeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const histogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+
   const [isDragging, setIsDragging] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [highlightWeekends, setHighlightWeekends] = useState(true);
   const prevHeightRef = useRef(height);
 
   // Resize Drag Handling
@@ -46,7 +51,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       const startHeight = height;
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
-        const deltaY = startY - moveEvent.clientY; // Dragging UP increases height
+        const deltaY = startY - moveEvent.clientY;
         const maxHeight = window.innerHeight * 0.75;
         const newHeight = Math.max(MIN_HEIGHT, Math.min(maxHeight, startHeight + deltaY));
         if (onHeightChange) {
@@ -70,7 +75,6 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
     [height, onHeightChange]
   );
 
-  // Touch Support for Mobile / Touchscreens
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       const startY = e.touches[0].clientY;
@@ -96,14 +100,12 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
     [height, onHeightChange]
   );
 
-  // Double Click handle to reset height
   const handleDoubleClick = () => {
     if (onHeightChange) {
       onHeightChange(DEFAULT_HEIGHT);
     }
   };
 
-  // 1-Click Expand / Minimize Toggle
   const toggleExpand = () => {
     if (!onHeightChange) return;
     if (isExpanded) {
@@ -116,7 +118,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
     }
   };
 
-  // Initialize Lightweight Chart
+  // Initialize Chart
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -145,9 +147,10 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       },
     });
 
+    // Main continuous line/area series
     const areaSeries = chart.addSeries(AreaSeries, {
-      topColor: 'rgba(8, 153, 129, 0.35)',
-      bottomColor: 'rgba(41, 98, 255, 0.02)',
+      topColor: 'rgba(41, 98, 255, 0.25)',
+      bottomColor: 'rgba(41, 98, 255, 0.01)',
       lineColor: '#2962ff',
       lineWidth: 2,
       priceFormat: {
@@ -156,8 +159,17 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       },
     });
 
+    // Histogram series for weekend / weekday color bars
+    const histogramSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: {
+        type: 'custom',
+        formatter: (val: number) => `${val.toFixed(4)}%`,
+      },
+    });
+
     chartRef.current = chart;
-    seriesRef.current = areaSeries;
+    areaSeriesRef.current = areaSeries;
+    histogramSeriesRef.current = histogramSeries;
 
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
@@ -174,23 +186,51 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
     };
   }, []);
 
-  // Update Data
+  // Update Data & Weekend Highlight Colors
   useEffect(() => {
-    if (!seriesRef.current) return;
+    if (!areaSeriesRef.current || !histogramSeriesRef.current) return;
 
     if (!data || data.length === 0) {
-      seriesRef.current.setData([]);
+      areaSeriesRef.current.setData([]);
+      histogramSeriesRef.current.setData([]);
       return;
     }
 
-    const formattedData = data.map((d) => ({
+    const areaData = data.map((d) => ({
       time: d.time as any,
       value: d.funding_rate_percentage,
     }));
 
-    seriesRef.current.setData(formattedData);
+    areaSeriesRef.current.setData(areaData);
+
+    if (highlightWeekends) {
+      // Color-code bars: Amber/Orange for weekend (Sat/Sun), Blue/Green/Red for weekdays
+      const barData = data.map((d) => {
+        const isWeekend = isWeekendTimestamp(d.time);
+        let barColor = 'rgba(41, 98, 255, 0.4)'; // Weekday standard blue
+
+        if (isWeekend) {
+          barColor = 'rgba(255, 152, 0, 0.85)'; // Weekend Amber highlight
+        } else if (d.funding_rate_percentage > 0.05) {
+          barColor = 'rgba(8, 153, 129, 0.6)'; // High positive green
+        } else if (d.funding_rate_percentage < -0.05) {
+          barColor = 'rgba(242, 54, 69, 0.6)'; // High negative red
+        }
+
+        return {
+          time: d.time as any,
+          value: d.funding_rate_percentage,
+          color: barColor,
+        };
+      });
+
+      histogramSeriesRef.current.setData(barData);
+    } else {
+      histogramSeriesRef.current.setData([]);
+    }
+
     chartRef.current?.timeScale().fitContent();
-  }, [data]);
+  }, [data, highlightWeekends]);
 
   const latestRate = data && data.length > 0 ? data[data.length - 1] : null;
   const latestPct = latestRate ? latestRate.funding_rate_percentage : 0;
@@ -214,25 +254,29 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
 
       {/* Subpane Toolbar Header */}
       <div className="subpane-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="subpane-title-group">
           <TrendingUp size={13} color="var(--accent-blue)" />
-          <span>Funding Rate ({symbol})</span>
+          <span className="subpane-title">Funding Rate ({symbol})</span>
           {latestRate && (
             <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '11px',
-                color: latestPct >= 0 ? 'var(--bull-green)' : 'var(--bear-red)',
-                fontWeight: 600,
-              }}
+              className={`subpane-rate-badge ${latestPct >= 0 ? 'price-up' : 'price-down'}`}
             >
-              {latestPct >= 0 ? '+' : ''}
-              {latestPct.toFixed(4)}% (Est. APR: {aprEstimate.toFixed(2)}%)
+              {formatFundingPct(latestPct)} (Est. APR: {aprEstimate.toFixed(2)}%)
             </span>
           )}
         </div>
 
         <div className="subpane-actions">
+          {/* Toggle Weekend Coloring */}
+          <button
+            className={`subpane-pill-btn ${highlightWeekends ? 'active' : ''}`}
+            onClick={() => setHighlightWeekends((prev) => !prev)}
+            title="Diferenciar tasas de fines de semana (Sábado y Domingo en Naranja)"
+          >
+            <Calendar size={12} />
+            <span>Fines de Semana</span>
+          </button>
+
           <button
             className="subpane-btn"
             onClick={toggleExpand}
@@ -240,6 +284,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
           >
             {isExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
+
           <button className="subpane-btn" onClick={onClose} title="Cerrar subpanel">
             <X size={14} />
           </button>
@@ -247,17 +292,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       </div>
 
       {loading && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: 'rgba(19, 23, 34, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-          }}
-        >
+        <div className="chart-loading-overlay">
           <div className="spinner" />
         </div>
       )}

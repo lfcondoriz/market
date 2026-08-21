@@ -10,7 +10,8 @@ import {
   type LogicalRange,
 } from 'lightweight-charts';
 import { AlertCircle } from 'lucide-react';
-import type { KlinePoint, Timeframe } from '../types';
+import { formatPrice, formatCompactVolume } from '../../utils/formatters';
+import type { KlinePoint, Timeframe } from '../../types';
 
 interface CandleChartProps {
   symbol: string;
@@ -247,25 +248,26 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         {legendData && (
           <div className="legend-ohlc">
             <span className="ohlc-item">
-              O: <span className="ohlc-val">{legendData.open.toLocaleString()}</span>
+              O: <span className="ohlc-val">{formatPrice(legendData.open)}</span>
             </span>
             <span className="ohlc-item">
-              H: <span className="ohlc-val">{legendData.high.toLocaleString()}</span>
+              H: <span className="ohlc-val">{formatPrice(legendData.high)}</span>
             </span>
             <span className="ohlc-item">
-              L: <span className="ohlc-val">{legendData.low.toLocaleString()}</span>
+              L: <span className="ohlc-val">{formatPrice(legendData.low)}</span>
             </span>
             <span className="ohlc-item">
-              C: <span className={`ohlc-val ${legendData.change >= 0 ? 'price-up' : 'price-down'}`}>
-                {legendData.close.toLocaleString()}
+              C:{' '}
+              <span className={`ohlc-val ${legendData.change >= 0 ? 'price-up' : 'price-down'}`}>
+                {formatPrice(legendData.close)}
               </span>
             </span>
             <span className={`ohlc-change ${legendData.change >= 0 ? 'price-up' : 'price-down'}`}>
               {legendData.change >= 0 ? '+' : ''}
-              {legendData.change.toFixed(2)} ({legendData.changePct.toFixed(2)}%)
+              {formatPrice(legendData.change)} ({legendData.changePct.toFixed(2)}%)
             </span>
-            <span className="ohlc-item" style={{ marginLeft: 8 }}>
-              Vol: <span className="ohlc-val">{legendData.volume.toLocaleString()}</span>
+            <span className="ohlc-item ohlc-vol">
+              Vol: <span className="ohlc-val">{formatCompactVolume(legendData.volume)}</span>
             </span>
           </div>
         )}
@@ -273,56 +275,22 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       {/* Loading Overlay */}
       {loading && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: 'rgba(19, 23, 34, 0.65)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 15,
-          }}
-        >
+        <div className="chart-loading-overlay">
           <div className="spinner" />
         </div>
       )}
 
       {/* Empty Data Banner */}
       {!loading && (!data || data.length === 0) && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: 'rgba(19, 23, 34, 0.85)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 14,
-            gap: '12px',
-            padding: '24px',
-            textAlign: 'center',
-          }}
-        >
+        <div className="empty-chart-banner">
           <AlertCircle size={36} color="var(--accent-amber)" />
-          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-bright)' }}>
+          <div className="empty-chart-title">
             No hay velas almacenadas para {symbol} (Intervalo: {timeframe})
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '500px' }}>
-            Para descargar este histórico en tu base de datos, ejecuta en la terminal:
+          <div className="empty-chart-subtitle">
+            Para sincronizar este activo en tu base de datos local, ejecuta:
           </div>
-          <code
-            style={{
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '12px',
-              color: 'var(--accent-cyan)',
-            }}
-          >
+          <code className="empty-chart-command">
             uv run market klines --category {category} --symbol {symbol} --interval {timeframe}
           </code>
         </div>

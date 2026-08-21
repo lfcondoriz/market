@@ -13,7 +13,7 @@ export async function fetchInstruments(
   category: BybitCategory = 'linear',
   search?: string,
   symbolType?: string,
-  limit: number = 500
+  limit: number = 2000
 ): Promise<InstrumentItem[]> {
   const params = new URLSearchParams({
     category,

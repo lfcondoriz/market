@@ -12,7 +12,7 @@ def list_instruments(
     symbol_type: str | None = Query(None, description="Filter by symbol type (e.g. stock, innovation)"),
     search: str | None = Query(None, description="Search term for symbol or base coin"),
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(50, ge=1, le=500, description="Items per page"),
+    limit: int = Query(50, ge=1, le=5000, description="Items per page"),
 ):
     """
     Get a paginated list of market instruments with optional filtering by type or search term.
