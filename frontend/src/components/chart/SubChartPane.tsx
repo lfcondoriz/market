@@ -204,7 +204,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
           time: d.time as any,
           position: 'inBar' as const,
           shape: 'circle' as const,
-          color: '#ff9800',
+          color: '#2962ff',
           size: 1,
         }));
       markersRef.current.setMarkers(weekendMarkers);
@@ -254,10 +254,10 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
           <button
             className={`subpane-pill-btn ${highlightWeekends ? 'active' : ''}`}
             onClick={() => setHighlightWeekends((prev) => !prev)}
-            title="Diferenciar tasas de fines de semana con puntos ámbar discretos (Sábado y Domingo)"
+            title="Diferenciar tasas de fines de semana con puntos discretos (Sábado y Domingo)"
           >
             <Calendar size={12} />
-            <span>Fines de Semana (● Naranja)</span>
+            <span>Marcadores Fin de Semana (●)</span>
           </button>
 
           <button

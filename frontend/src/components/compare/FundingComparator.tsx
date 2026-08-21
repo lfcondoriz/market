@@ -143,7 +143,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
 
       series.setData(formattedData);
 
-      // Clean, un-cluttered Weekend Markers (Orange dots on weekend data points)
+      // Clean, un-cluttered Weekend Markers matching each curve's own color
       if (showWeekendDots && item.data.length > 0 && markers) {
         const weekendMarkers = item.data
           .filter((d) => isWeekendTimestamp(d.time))
@@ -151,7 +151,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
             time: d.time as any,
             position: 'inBar' as const,
             shape: 'circle' as const,
-            color: '#ff9800',
+            color: item.color,
             size: 1,
           }));
         markers.setMarkers(weekendMarkers);
@@ -199,10 +199,10 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
             <button
               className={`chip-btn ${showWeekendDots ? 'active' : ''}`}
               onClick={() => setShowWeekendDots((prev) => !prev)}
-              title="Resaltar registros de fin de semana con puntos ámbar discretos (Sábado y Domingo)"
+              title="Resaltar registros de fin de semana con puntos discretos (Sábado y Domingo)"
             >
               <Calendar size={13} />
-              <span>Fines de Semana (● Naranja)</span>
+              <span>Marcadores Fin de Semana (●)</span>
             </button>
 
             {/* Add symbol picker trigger */}
