@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   createChart,
+  createSeriesMarkers,
   AreaSeries,
-  HistogramSeries,
   ColorType,
   type IChartApi,
   type ISeriesApi,
@@ -34,7 +34,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const areaSeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
-  const histogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const markersRef = useRef<any>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -147,7 +147,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       },
     });
 
-    // Main continuous line/area series
+    // Main continuous area series
     const areaSeries = chart.addSeries(AreaSeries, {
       topColor: 'rgba(41, 98, 255, 0.25)',
       bottomColor: 'rgba(41, 98, 255, 0.01)',
@@ -159,17 +159,9 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       },
     });
 
-    // Histogram series for weekend / weekday color bars
-    const histogramSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: {
-        type: 'custom',
-        formatter: (val: number) => `${val.toFixed(4)}%`,
-      },
-    });
-
+    markersRef.current = createSeriesMarkers(areaSeries);
     chartRef.current = chart;
     areaSeriesRef.current = areaSeries;
-    histogramSeriesRef.current = histogramSeries;
 
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
@@ -183,16 +175,18 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
+      markersRef.current = null;
     };
   }, []);
 
-  // Update Data & Weekend Highlight Colors
+  // Update Data & Weekend Markers
   useEffect(() => {
-    if (!areaSeriesRef.current || !histogramSeriesRef.current) return;
+    const series = areaSeriesRef.current;
+    if (!series) return;
 
     if (!data || data.length === 0) {
-      areaSeriesRef.current.setData([]);
-      histogramSeriesRef.current.setData([]);
+      series.setData([]);
+      markersRef.current?.setMarkers([]);
       return;
     }
 
@@ -201,32 +195,21 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       value: d.funding_rate_percentage,
     }));
 
-    areaSeriesRef.current.setData(areaData);
+    series.setData(areaData);
 
-    if (highlightWeekends) {
-      // Color-code bars: Amber/Orange for weekend (Sat/Sun), Blue/Green/Red for weekdays
-      const barData = data.map((d) => {
-        const isWeekend = isWeekendTimestamp(d.time);
-        let barColor = 'rgba(41, 98, 255, 0.4)'; // Weekday standard blue
-
-        if (isWeekend) {
-          barColor = 'rgba(255, 152, 0, 0.85)'; // Weekend Amber highlight
-        } else if (d.funding_rate_percentage > 0.05) {
-          barColor = 'rgba(8, 153, 129, 0.6)'; // High positive green
-        } else if (d.funding_rate_percentage < -0.05) {
-          barColor = 'rgba(242, 54, 69, 0.6)'; // High negative red
-        }
-
-        return {
+    if (highlightWeekends && markersRef.current) {
+      const weekendMarkers = data
+        .filter((d) => isWeekendTimestamp(d.time))
+        .map((d) => ({
           time: d.time as any,
-          value: d.funding_rate_percentage,
-          color: barColor,
-        };
-      });
-
-      histogramSeriesRef.current.setData(barData);
-    } else {
-      histogramSeriesRef.current.setData([]);
+          position: 'inBar' as const,
+          shape: 'circle' as const,
+          color: '#ff9800',
+          size: 1,
+        }));
+      markersRef.current.setMarkers(weekendMarkers);
+    } else if (markersRef.current) {
+      markersRef.current.setMarkers([]);
     }
 
     chartRef.current?.timeScale().fitContent();
@@ -267,14 +250,14 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
         </div>
 
         <div className="subpane-actions">
-          {/* Toggle Weekend Coloring */}
+          {/* Toggle Weekend Dot Markers */}
           <button
             className={`subpane-pill-btn ${highlightWeekends ? 'active' : ''}`}
             onClick={() => setHighlightWeekends((prev) => !prev)}
-            title="Diferenciar tasas de fines de semana (Sábado y Domingo en Naranja)"
+            title="Diferenciar tasas de fines de semana con puntos ámbar discretos (Sábado y Domingo)"
           >
             <Calendar size={12} />
-            <span>Fines de Semana</span>
+            <span>Fines de Semana (● Naranja)</span>
           </button>
 
           <button

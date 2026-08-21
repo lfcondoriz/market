@@ -1,36 +1,40 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   createChart,
+  createSeriesMarkers,
   LineSeries,
   ColorType,
   CrosshairMode,
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { Plus, X, LineChart } from 'lucide-react';
+import { Plus, X, LineChart, Calendar } from 'lucide-react';
 import { useMultiFundingRates } from '../../hooks/useMultiFundingRates';
-import { formatFundingPct } from '../../utils/formatters';
+import { formatFundingPct, isWeekendTimestamp } from '../../utils/formatters';
 import type { InstrumentItem } from '../../types';
 
 interface FundingComparatorProps {
   instruments: InstrumentItem[];
+  selectedSymbols: string[];
+  onSymbolsChange: (symbols: string[]) => void;
   onSelectSymbolForChart: (symbol: string) => void;
 }
 
-const INITIAL_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'MARAUSDT', 'BITOUSDT'];
-
 export const FundingComparator: React.FC<FundingComparatorProps> = ({
   instruments,
+  selectedSymbols,
+  onSymbolsChange,
 }) => {
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(INITIAL_SYMBOLS);
   const [searchPicker, setSearchPicker] = useState<string>('');
   const [isPickerOpen, setIsPickerOpen] = useState<boolean>(false);
+  const [showWeekendDots, setShowWeekendDots] = useState<boolean>(true);
 
   const { seriesList, loading } = useMultiFundingRates(selectedSymbols, 'linear');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const lineSeriesMapRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const markersMapRef = useRef<Map<string, any>>(new Map());
 
   // Initialize Multi-Line Chart
   useEffect(() => {
@@ -91,15 +95,17 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
       chart.remove();
       chartRef.current = null;
       lineSeriesMapRef.current.clear();
+      markersMapRef.current.clear();
     };
   }, []);
 
-  // Update Series when multi-funding data updates
+  // Update Series when multi-funding data or weekend toggle updates
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
     const currentMap = lineSeriesMapRef.current;
+    const currentMarkersMap = markersMapRef.current;
 
     // 1. Remove series that are no longer in selectedSymbols
     const activeSet = new Set(selectedSymbols);
@@ -107,12 +113,14 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
       if (!activeSet.has(sym)) {
         chart.removeSeries(series);
         currentMap.delete(sym);
+        currentMarkersMap.delete(sym);
       }
     }
 
     // 2. Add or update series for each selected item
     seriesList.forEach((item) => {
       let series = currentMap.get(item.symbol);
+      let markers = currentMarkersMap.get(item.symbol);
 
       if (!series) {
         series = chart.addSeries(LineSeries, {
@@ -123,7 +131,9 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
             formatter: (val: number) => `${val.toFixed(4)}%`,
           },
         });
+        markers = createSeriesMarkers(series);
         currentMap.set(item.symbol, series);
+        currentMarkersMap.set(item.symbol, markers);
       }
 
       const formattedData = item.data.map((d) => ({
@@ -132,21 +142,37 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
       }));
 
       series.setData(formattedData);
+
+      // Clean, un-cluttered Weekend Markers (Orange dots on weekend data points)
+      if (showWeekendDots && item.data.length > 0 && markers) {
+        const weekendMarkers = item.data
+          .filter((d) => isWeekendTimestamp(d.time))
+          .map((d) => ({
+            time: d.time as any,
+            position: 'inBar' as const,
+            shape: 'circle' as const,
+            color: '#ff9800',
+            size: 1,
+          }));
+        markers.setMarkers(weekendMarkers);
+      } else if (markers) {
+        markers.setMarkers([]);
+      }
     });
 
     chart.timeScale().fitContent();
-  }, [seriesList, selectedSymbols]);
+  }, [seriesList, selectedSymbols, showWeekendDots]);
 
   const handleAddSymbol = (symbol: string) => {
     if (!selectedSymbols.includes(symbol)) {
-      setSelectedSymbols((prev) => [...prev, symbol]);
+      onSymbolsChange([...selectedSymbols, symbol]);
     }
     setIsPickerOpen(false);
     setSearchPicker('');
   };
 
   const handleRemoveSymbol = (symbol: string) => {
-    setSelectedSymbols((prev) => prev.filter((s) => s !== symbol));
+    onSymbolsChange(selectedSymbols.filter((s) => s !== symbol));
   };
 
   const availableInstruments = instruments
@@ -156,7 +182,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
         (inst.symbol.toLowerCase().includes(searchPicker.toLowerCase()) ||
           (inst.display_name && inst.display_name.toLowerCase().includes(searchPicker.toLowerCase())))
     )
-    .slice(0, 15);
+    .slice(0, 20);
 
   return (
     <div className="compare-workspace">
@@ -169,6 +195,16 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
           </div>
 
           <div className="compare-actions">
+            {/* Toggle Weekend Dot Markers */}
+            <button
+              className={`chip-btn ${showWeekendDots ? 'active' : ''}`}
+              onClick={() => setShowWeekendDots((prev) => !prev)}
+              title="Resaltar registros de fin de semana con puntos ámbar discretos (Sábado y Domingo)"
+            >
+              <Calendar size={13} />
+              <span>Fines de Semana (● Naranja)</span>
+            </button>
+
             {/* Add symbol picker trigger */}
             <div className="picker-wrapper">
               <button
@@ -201,7 +237,9 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
                           onClick={() => handleAddSymbol(inst.symbol)}
                         >
                           <span className="picker-item-sym">{inst.symbol}</span>
-                          <span className="badge-tag badge-type">{inst.symbol_type || 'Crypto'}</span>
+                          <span className={`badge-type-label ${inst.symbol_type ? inst.symbol_type.toLowerCase() : ''}`}>
+                            {inst.symbol_type || 'Crypto'}
+                          </span>
                         </div>
                       ))
                     )}
@@ -225,7 +263,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
                 <button
                   className="legend-remove-btn"
                   onClick={() => handleRemoveSymbol(item.symbol)}
-                  title="Quitar activo"
+                  title="Quitar activo de la comparación"
                 >
                   <X size={12} />
                 </button>
@@ -255,7 +293,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
           <div className="chart-loading-overlay">
             <div className="spinner" />
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Superponiendo series de funding...
+              Superponiendo curvas de funding...
             </span>
           </div>
         )}

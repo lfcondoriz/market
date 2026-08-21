@@ -11,12 +11,37 @@ import { useKlines } from './hooks/useKlines';
 import { useFundingRates } from './hooks/useFundingRates';
 import type { Timeframe } from './types';
 
+const DEFAULT_COMPARE_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'MARAUSDT', 'BITOUSDT'];
+
 export const App: React.FC = () => {
   // Navigation & Active Symbol State
   const [currentSymbol, setCurrentSymbol] = useState<string>('BTCUSDT');
   const [category] = useState<string>('linear');
   const [timeframe, setTimeframe] = useState<Timeframe>('1');
   const [activeTab, setActiveTab] = useState<ActiveTabMode>('chart');
+
+  // Persistent Comparison Symbols State
+  const [compareSymbols, setCompareSymbols] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('market_compare_symbols');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Error reading saved compare symbols:', e);
+    }
+    return DEFAULT_COMPARE_SYMBOLS;
+  });
+
+  const handleCompareSymbolsChange = (symbols: string[]) => {
+    setCompareSymbols(symbols);
+    try {
+      localStorage.setItem('market_compare_symbols', JSON.stringify(symbols));
+    } catch (e) {
+      console.error('Error saving compare symbols:', e);
+    }
+  };
 
   // UI Panels State
   const [showSubChart, setShowSubChart] = useState<boolean>(true);
@@ -92,6 +117,8 @@ export const App: React.FC = () => {
         {activeTab === 'compare' && (
           <FundingComparator
             instruments={instruments}
+            selectedSymbols={compareSymbols}
+            onSymbolsChange={handleCompareSymbolsChange}
             onSelectSymbolForChart={handleSelectSymbol}
           />
         )}
