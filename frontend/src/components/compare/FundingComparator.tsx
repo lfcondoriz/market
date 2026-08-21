@@ -1,12 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   createChart,
   createSeriesMarkers,
   LineSeries,
   ColorType,
   CrosshairMode,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
 } from 'lightweight-charts';
 import {
   Plus,
@@ -20,10 +22,28 @@ import {
   CheckSquare,
   Square,
   Sparkles,
+  Clock,
 } from 'lucide-react';
 import { useMarket } from '../../context/MarketContext';
 import { useMultiFundingRates } from '../../hooks/useMultiFundingRates';
-import { formatFundingPct, isWeekendTimestamp } from '../../utils/formatters';
+import {
+  formatFundingPct,
+  formatAprPct,
+  formatDateTimeUTC,
+  isWeekendTimestamp,
+} from '../../utils/formatters';
+
+type ScaleMode = 'nominal' | 'apr';
+type TimeRangePreset = '7D' | '30D' | '90D' | '180D' | '1Y' | 'ALL';
+
+const TIME_RANGES: { id: TimeRangePreset; label: string; days: number | null }[] = [
+  { id: '7D', label: '7D', days: 7 },
+  { id: '30D', label: '30D', days: 30 },
+  { id: '90D', label: '90D', days: 90 },
+  { id: '180D', label: '180D', days: 180 },
+  { id: '1Y', label: '1A', days: 365 },
+  { id: 'ALL', label: 'Todo', days: null },
+];
 
 export const FundingComparator: React.FC = () => {
   const {
@@ -39,10 +59,17 @@ export const FundingComparator: React.FC = () => {
     filterInstruments,
   } = useMarket();
 
+  // Display & UI state
+  const [scaleMode, setScaleMode] = useState<ScaleMode>('nominal');
+  const [activeRange, setActiveRange] = useState<TimeRangePreset>('ALL');
   const [searchPicker, setSearchPicker] = useState<string>('');
   const [isPickerOpen, setIsPickerOpen] = useState<boolean>(false);
   const [showWeekendDots, setShowWeekendDots] = useState<boolean>(true);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+
+  // Crosshair synchronized values state
+  const [hoverTimestamp, setHoverTimestamp] = useState<number | null>(null);
+  const [hoverValues, setHoverValues] = useState<Map<string, number>>(new Map());
 
   const { seriesList, loading } = useMultiFundingRates(compareItems, 'linear');
 
@@ -50,6 +77,7 @@ export const FundingComparator: React.FC = () => {
   const chartRef = useRef<IChartApi | null>(null);
   const lineSeriesMapRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const markersMapRef = useRef<Map<string, any>>(new Map());
+  const zeroBaselineRef = useRef<IPriceLine | null>(null);
 
   // Initialize Multi-Line Chart
   useEffect(() => {
@@ -95,6 +123,27 @@ export const FundingComparator: React.FC = () => {
 
     chartRef.current = chart;
 
+    // Crosshair Hover Synchronization Listener (#2)
+    chart.subscribeCrosshairMove((param) => {
+      if (!param || !param.time || !param.seriesData || param.point === undefined) {
+        setHoverTimestamp(null);
+        setHoverValues(new Map());
+        return;
+      }
+
+      setHoverTimestamp(param.time as number);
+      const newHoverMap = new Map<string, number>();
+
+      for (const [sym, series] of lineSeriesMapRef.current.entries()) {
+        const pointData = param.seriesData.get(series) as { value: number } | undefined;
+        if (pointData !== undefined && pointData.value !== undefined) {
+          newHoverMap.set(sym, pointData.value);
+        }
+      }
+
+      setHoverValues(newHoverMap);
+    });
+
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       const { width, height } = entries[0].contentRect;
@@ -109,10 +158,11 @@ export const FundingComparator: React.FC = () => {
       chartRef.current = null;
       lineSeriesMapRef.current.clear();
       markersMapRef.current.clear();
+      zeroBaselineRef.current = null;
     };
   }, []);
 
-  // Update Series when multi-funding data, visibility, focus, or weekend toggle updates
+  // Update Series when data, scaleMode, focus, or weekend dots change
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -130,7 +180,6 @@ export const FundingComparator: React.FC = () => {
       }
     }
 
-    // 2. Add or update series for each item
     seriesList.forEach((item) => {
       let series = currentMap.get(item.symbol);
       let markers = currentMarkersMap.get(item.symbol);
@@ -143,29 +192,39 @@ export const FundingComparator: React.FC = () => {
           lineWidth: isFocused ? 4 : 2,
           priceFormat: {
             type: 'custom',
-            formatter: (val: number) => `${val.toFixed(4)}%`,
+            formatter: (val: number) =>
+              scaleMode === 'apr' ? `${val.toFixed(2)}% APR` : `${val.toFixed(4)}%`,
           },
         });
         markers = createSeriesMarkers(series);
         currentMap.set(item.symbol, series);
         currentMarkersMap.set(item.symbol, markers);
+      } else {
+        // Update format options when scaleMode changes (#6)
+        series.applyOptions({
+          visible: item.visible,
+          color: item.color,
+          lineWidth: isFocused ? 4 : 2,
+          priceFormat: {
+            type: 'custom',
+            formatter: (val: number) =>
+              scaleMode === 'apr' ? `${val.toFixed(2)}% APR` : `${val.toFixed(4)}%`,
+          },
+        });
       }
 
-      // Dynamic Visibility and Line Thickness Toggle based on Focus
-      series.applyOptions({
-        visible: item.visible,
-        color: item.color,
-        lineWidth: isFocused ? 4 : 2,
-      });
-
+      // Convert values based on scaleMode (% nominal vs % APR)
       const formattedData = item.data.map((d) => ({
         time: d.time as any,
-        value: d.funding_rate_percentage,
+        value:
+          scaleMode === 'apr'
+            ? d.funding_rate_percentage * 3 * 365
+            : d.funding_rate_percentage,
       }));
 
       series.setData(formattedData);
 
-      // Clean Weekend Markers (matching each curve's color)
+      // Weekend Markers matching curve color
       if (item.visible && showWeekendDots && item.data.length > 0 && markers) {
         const weekendMarkers = item.data
           .filter((d) => isWeekendTimestamp(d.time))
@@ -182,8 +241,63 @@ export const FundingComparator: React.FC = () => {
       }
     });
 
-    chart.timeScale().fitContent();
-  }, [seriesList, compareItems, focusedSymbol, showWeekendDots]);
+    // 3. Zero Baseline (0.00%) (#3)
+    const activeSeriesList = Array.from(currentMap.values());
+    if (activeSeriesList.length > 0 && !zeroBaselineRef.current) {
+      zeroBaselineRef.current = activeSeriesList[0].createPriceLine({
+        price: 0,
+        color: 'rgba(120, 123, 134, 0.45)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '0.00%',
+      });
+    }
+
+    if (activeRange === 'ALL') {
+      chart.timeScale().fitContent();
+    }
+  }, [seriesList, compareItems, focusedSymbol, showWeekendDots, scaleMode]);
+
+  // Apply Time Range Preset (#4)
+  const applyTimeRange = useCallback(
+    (rangeId: TimeRangePreset) => {
+      setActiveRange(rangeId);
+      const chart = chartRef.current;
+      if (!chart) return;
+
+      if (rangeId === 'ALL') {
+        chart.timeScale().fitContent();
+        return;
+      }
+
+      const preset = TIME_RANGES.find((r) => r.id === rangeId);
+      if (!preset || !preset.days) return;
+
+      // Find highest timestamp across all series
+      let maxTime = 0;
+      seriesList.forEach((s) => {
+        if (s.data && s.data.length > 0) {
+          const last = s.data[s.data.length - 1].time;
+          if (last > maxTime) maxTime = last;
+        }
+      });
+
+      if (maxTime === 0) maxTime = Math.floor(Date.now() / 1000);
+
+      const fromTime = maxTime - preset.days * 86400;
+
+      try {
+        chart.timeScale().setVisibleRange({
+          from: fromTime as any,
+          to: maxTime as any,
+        });
+      } catch (e) {
+        console.error('Error applying visible range:', e);
+      }
+    },
+    [seriesList]
+  );
 
   // Drag and Drop (Dropping an asset into the comparator adds it)
   const handleDragOver = (e: React.DragEvent) => {
@@ -230,16 +344,62 @@ export const FundingComparator: React.FC = () => {
                 ? `Funding Rate (${compareItems[0].symbol})`
                 : `Comparativa de Funding (${compareItems.length} activos superpuestos)`}
             </span>
-            {compareItems.length > 1 && focusedSymbol && (
-              <span className="focused-symbol-badge">
-                <Sparkles size={11} />
-                <span>Enfocado: {focusedSymbol}</span>
+
+            {/* Synchronized Hover Date Badge (#2) */}
+            {hoverTimestamp ? (
+              <span className="hover-time-badge">
+                <Clock size={11} />
+                <span>{formatDateTimeUTC(hoverTimestamp)}</span>
               </span>
+            ) : (
+              compareItems.length > 1 &&
+              focusedSymbol && (
+                <span className="focused-symbol-badge">
+                  <Sparkles size={11} />
+                  <span>Enfocado: {focusedSymbol}</span>
+                </span>
+              )
             )}
           </div>
 
           <div className="compare-actions">
-            {/* Presets dropdown / group */}
+            {/* Quick Time Range Presets (#4) */}
+            <div className="range-preset-group">
+              {TIME_RANGES.map((range) => (
+                <button
+                  key={range.id}
+                  className={`range-btn ${activeRange === range.id ? 'active' : ''}`}
+                  onClick={() => applyTimeRange(range.id)}
+                  title={`Ver histórico de ${range.label}`}
+                >
+                  {range.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="topbar-divider" />
+
+            {/* Scale Mode Selector: % Nominal vs % APR (#6) */}
+            <div className="scale-mode-toggle">
+              <button
+                className={`scale-toggle-btn ${scaleMode === 'nominal' ? 'active' : ''}`}
+                onClick={() => setScaleMode('nominal')}
+                title="Mostrar tasa nominal por intervalo de 8 horas (ej. +0.0100%)"
+              >
+                % 8h Nominal
+              </button>
+              <button
+                className={`scale-toggle-btn ${scaleMode === 'apr' ? 'active' : ''}`}
+                onClick={() => setScaleMode('apr')}
+                title="Mostrar tasa anualizada estimada APR (ej. +10.95% APR)"
+              >
+                % APR Anual
+              </button>
+            </div>
+
+            <div className="topbar-divider" />
+
+            {/* Category Presets */}
             <div className="preset-group">
               <span className="preset-label">Presets:</span>
               <button
@@ -265,14 +425,14 @@ export const FundingComparator: React.FC = () => {
               </button>
             </div>
 
-            {/* Mass visibility toggles */}
+            {/* Mass visibility toggle */}
             <button
               className="chip-btn"
               onClick={() => setAllCompareVisibility(!allVisible)}
               title={allVisible ? 'Ocultar todas las líneas' : 'Mostrar todas las líneas'}
             >
               {allVisible ? <Square size={13} /> : <CheckSquare size={13} />}
-              <span>{allVisible ? 'Ocultar Todo' : 'Mostrar Todo'}</span>
+              <span>{allVisible ? 'Ocultar' : 'Mostrar Todo'}</span>
             </button>
 
             {/* Toggle Weekend Dot Markers */}
@@ -282,7 +442,7 @@ export const FundingComparator: React.FC = () => {
               title="Resaltar registros de fin de semana con puntos del color de cada curva (Sábado y Domingo)"
             >
               <Calendar size={13} />
-              <span>Marcadores Fin de Semana (●)</span>
+              <span>Fines de Semana (●)</span>
             </button>
 
             {/* Add symbol picker trigger */}
@@ -349,10 +509,28 @@ export const FundingComparator: React.FC = () => {
           </div>
         </div>
 
-        {/* Multi-Asset Legend Chips with Visibility Toggles & Focus */}
+        {/* Multi-Asset Legend Chips with Synchronized Hover Values (#2) */}
         <div className="compare-legend-chips">
           {seriesList.map((item) => {
             const isFocused = focusedSymbol === item.symbol;
+
+            // Use synchronized hover value if mouse is over chart (#2)
+            const hasHover = hoverTimestamp !== null && hoverValues.has(item.symbol);
+            const displayRawValue = hasHover
+              ? hoverValues.get(item.symbol)!
+              : scaleMode === 'apr'
+              ? (item.latestPct || 0) * 3 * 365
+              : item.latestPct || 0;
+
+            const displayPct =
+              scaleMode === 'apr'
+                ? displayRawValue / (3 * 365)
+                : displayRawValue;
+            const displayApr =
+              scaleMode === 'apr'
+                ? displayRawValue
+                : displayRawValue * 3 * 365;
+
             return (
               <div
                 key={item.symbol}
@@ -405,21 +583,43 @@ export const FundingComparator: React.FC = () => {
                 </div>
 
                 <div className="legend-stats-row">
-                  <span
-                    className="legend-pct"
-                    style={{
-                      color: !item.visible
-                        ? 'var(--text-muted)'
-                        : (item.latestPct || 0) >= 0
-                        ? 'var(--bull-green)'
-                        : 'var(--bear-red)',
-                    }}
-                  >
-                    {formatFundingPct(item.latestPct)}
-                  </span>
-                  <span className="legend-apr">
-                    APR: {(item.latestApr || 0).toFixed(2)}%
-                  </span>
+                  {scaleMode === 'nominal' ? (
+                    <>
+                      <span
+                        className="legend-pct"
+                        style={{
+                          color: !item.visible
+                            ? 'var(--text-muted)'
+                            : displayPct >= 0
+                            ? 'var(--bull-green)'
+                            : 'var(--bear-red)',
+                        }}
+                      >
+                        {formatFundingPct(displayPct)}
+                      </span>
+                      <span className="legend-apr">
+                        APR: {displayApr.toFixed(2)}%
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        className="legend-pct"
+                        style={{
+                          color: !item.visible
+                            ? 'var(--text-muted)'
+                            : displayApr >= 0
+                            ? 'var(--bull-green)'
+                            : 'var(--bear-red)',
+                        }}
+                      >
+                        {formatAprPct(displayApr)}
+                      </span>
+                      <span className="legend-apr">
+                        8h: {formatFundingPct(displayPct)}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -442,7 +642,7 @@ export const FundingComparator: React.FC = () => {
           <div className="chart-drop-overlay">
             <div className="drop-indicator-badge">
               <Layers size={16} />
-              <span>Soltar para superponer activo</span>
+              <span>Soltar para superponer y comparar activo</span>
             </div>
           </div>
         )}

@@ -25,6 +25,15 @@ export function formatFundingPct(pct: number | undefined | null, decimals: numbe
 }
 
 /**
+ * Formats APR percentage string with sign (e.g. +10.95% APR).
+ */
+export function formatAprPct(apr: number | undefined | null, decimals: number = 2): string {
+  if (apr === undefined || apr === null || isNaN(apr)) return '-';
+  const prefix = apr > 0 ? '+' : '';
+  return `${prefix}${apr.toFixed(decimals)}% APR`;
+}
+
+/**
  * Formats volume numbers in compact format (K, M, B).
  */
 export function formatCompactVolume(vol: number | undefined | null): string {
@@ -51,4 +60,18 @@ export function getWeekdayName(timestampSec: number): string {
   const date = new Date(timestampSec * 1000);
   const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   return days[date.getUTCDay()];
+}
+
+/**
+ * Formats a Unix timestamp into a readable date-time string (e.g. "21 Ago 2026, 16:00 UTC").
+ */
+export function formatDateTimeUTC(timestampSec: number): string {
+  const date = new Date(timestampSec * 1000);
+  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const day = date.getUTCDate().toString().padStart(2, '0');
+  const month = months[date.getUTCMonth()];
+  const year = date.getUTCFullYear();
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  return `${day} ${month} ${year}, ${hours}:${minutes} UTC`;
 }
