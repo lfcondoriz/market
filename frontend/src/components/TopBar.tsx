@@ -110,19 +110,15 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <button
           onClick={onToggleWatchlist}
+          className={`tab-btn ${showWatchlist ? 'active' : ''}`}
           style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            padding: '6px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
+            padding: '5px 9px',
+            gap: '6px',
           }}
-          title={showWatchlist ? 'Ocultar Watchlist' : 'Mostrar Watchlist'}
+          title={showWatchlist ? 'Ocultar Watchlist (Lista de seguimiento)' : 'Mostrar Watchlist (Lista de seguimiento)'}
         >
-          {showWatchlist ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+          {showWatchlist ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+          <span>Watchlist</span>
         </button>
       </div>
     </header>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bookmark } from 'lucide-react';
+import { Search, Bookmark, X } from 'lucide-react';
 import type { InstrumentItem } from '../types';
 import { AssetDetailsCard } from './AssetDetailsCard';
 
@@ -9,6 +9,7 @@ interface WatchlistProps {
   onSelectSymbol: (symbol: string) => void;
   activeInstrument: InstrumentItem | null;
   loading: boolean;
+  onClose?: () => void;
 }
 
 export const Watchlist: React.FC<WatchlistProps> = ({
@@ -17,6 +18,7 @@ export const Watchlist: React.FC<WatchlistProps> = ({
   onSelectSymbol,
   activeInstrument,
   loading,
+  onClose,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'crypto' | 'stock' | 'commodity'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,9 +58,29 @@ export const Watchlist: React.FC<WatchlistProps> = ({
             <Bookmark size={15} color="var(--accent-blue)" />
             <span>Lista de Seguimiento</span>
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {filtered.length} activos
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              {filtered.length} activos
+            </span>
+            {onClose && (
+              <button
+                onClick={onClose}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '2px',
+                  borderRadius: '3px',
+                }}
+                title="Ocultar barra lateral"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Search input */}

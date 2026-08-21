@@ -25,6 +25,7 @@ export const App: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('1');
   const [activeTab, setActiveTab] = useState<'chart' | 'scanner'>('chart');
   const [showSubChart, setShowSubChart] = useState<boolean>(true);
+  const [subChartHeight, setSubChartHeight] = useState<number>(190);
   const [showWatchlist, setShowWatchlist] = useState<boolean>(true);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
 
@@ -137,13 +138,15 @@ export const App: React.FC = () => {
               loading={loadingKlines}
             />
 
-            {/* Sub-panel: Synchronized Funding Rate Chart */}
+            {/* Sub-panel: Synchronized Funding Rate Chart (Resizable) */}
             {showSubChart && (
               <SubChartPane
                 symbol={currentSymbol}
                 data={fundingRates}
                 loading={loadingFunding}
                 onClose={() => setShowSubChart(false)}
+                height={subChartHeight}
+                onHeightChange={setSubChartHeight}
               />
             )}
           </main>
@@ -160,6 +163,7 @@ export const App: React.FC = () => {
             onSelectSymbol={handleSelectSymbol}
             activeInstrument={activeInstrument}
             loading={loadingInstruments}
+            onClose={() => setShowWatchlist(false)}
           />
         )}
       </div>
