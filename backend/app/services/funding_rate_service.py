@@ -31,9 +31,12 @@ def get_funding_rate_history(
         if end_time:
             query = query.where(FundingRate.funding_rate_timestamp <= end_time)
 
-        query = query.order_by(FundingRate.funding_rate_timestamp.asc()).limit(limit)
-
-        records = db.execute(query).scalars().all()
+        if start_time and not end_time:
+            query = query.order_by(FundingRate.funding_rate_timestamp.asc()).limit(limit)
+            records = list(db.execute(query).scalars().all())
+        else:
+            query = query.order_by(FundingRate.funding_rate_timestamp.desc()).limit(limit)
+            records = list(reversed(db.execute(query).scalars().all()))
 
         points: list[FundingRatePoint] = []
         for row in records:

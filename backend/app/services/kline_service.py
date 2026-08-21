@@ -33,15 +33,18 @@ def get_kline_history(
         if end_time:
             query = query.where(Kline.open_time <= end_time)
 
-        # For charts, chronological order (ascending) is standard
-        if ascending:
-            query = query.order_by(Kline.open_time.asc())
+        if start_time and not end_time:
+            if ascending:
+                query = query.order_by(Kline.open_time.asc()).limit(limit)
+                records = list(db.execute(query).scalars().all())
+            else:
+                query = query.order_by(Kline.open_time.desc()).limit(limit)
+                records = list(db.execute(query).scalars().all())
         else:
-            query = query.order_by(Kline.open_time.desc())
-
-        query = query.limit(limit)
-
-        records = db.execute(query).scalars().all()
+            query = query.order_by(Kline.open_time.desc()).limit(limit)
+            records = list(db.execute(query).scalars().all())
+            if ascending:
+                records.reverse()
 
         points: list[KlinePoint] = [
             KlinePoint(
