@@ -65,13 +65,20 @@ export interface MarketSummaryResponse {
   top_negative: FundingRateSummaryItem[];
 }
 
+export interface CompareItemState {
+  symbol: string;
+  color: string;
+  visible: boolean;
+}
+
 export interface CompareSeriesItem {
   symbol: string;
   color: string;
+  visible: boolean;
   data: FundingRatePoint[];
   loading: boolean;
   latestPct?: number;
   latestApr?: number;
 }
 
-export type FundingVisualizationMode = 'area' | 'weekend-highlight' | 'bars';
+export type ActiveTabMode = 'chart' | 'compare' | 'scanner';

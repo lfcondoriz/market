@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, ArrowRight, RefreshCw } from 'lucide-react';
+import { useMarket } from '../../context/MarketContext';
 import { fetchMarketSummary } from '../../services/api';
 import { formatFundingPct } from '../../utils/formatters';
 import type { MarketSummaryResponse } from '../../types';
 
-interface FundingScannerProps {
-  onSelectSymbol: (symbol: string) => void;
-}
-
-export const FundingScanner: React.FC<FundingScannerProps> = ({ onSelectSymbol }) => {
+export const FundingScanner: React.FC = () => {
+  const { setActiveSymbol } = useMarket();
   const [summary, setSummary] = useState<MarketSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +86,7 @@ export const FundingScanner: React.FC<FundingScannerProps> = ({ onSelectSymbol }
                 {summary.top_positive.map((item) => (
                   <div
                     key={item.symbol}
-                    onClick={() => onSelectSymbol(item.symbol)}
+                    onClick={() => setActiveSymbol(item.symbol)}
                     className="scanner-table-row"
                   >
                     <span className="scanner-row-symbol">{item.symbol}</span>
@@ -133,7 +131,7 @@ export const FundingScanner: React.FC<FundingScannerProps> = ({ onSelectSymbol }
                 {summary.top_negative.map((item) => (
                   <div
                     key={item.symbol}
-                    onClick={() => onSelectSymbol(item.symbol)}
+                    onClick={() => setActiveSymbol(item.symbol)}
                     className="scanner-table-row"
                   >
                     <span className="scanner-row-symbol">{item.symbol}</span>

@@ -8,50 +8,37 @@ import {
   PanelRightOpen,
   Activity,
 } from 'lucide-react';
+import { useMarket } from '../../context/MarketContext';
 import { TIMEFRAME_OPTIONS } from '../../constants/timeframes';
-import type { Timeframe } from '../../types';
 
-export type ActiveTabMode = 'chart' | 'compare' | 'scanner';
+export const TopBar: React.FC = () => {
+  const {
+    activeSymbol,
+    category,
+    activeInstrument,
+    timeframe,
+    setTimeframe,
+    activeTab,
+    setActiveTab,
+    showSubChart,
+    toggleSubChart,
+    showWatchlist,
+    toggleWatchlist,
+    openSearch,
+  } = useMarket();
 
-interface TopBarProps {
-  currentSymbol: string;
-  category: string;
-  symbolType?: string;
-  timeframe: Timeframe;
-  onTimeframeChange: (tf: Timeframe) => void;
-  onOpenSearch: () => void;
-  activeTab: ActiveTabMode;
-  onTabChange: (tab: ActiveTabMode) => void;
-  showSubChart: boolean;
-  onToggleSubChart: () => void;
-  showWatchlist: boolean;
-  onToggleWatchlist: () => void;
-}
-
-export const TopBar: React.FC<TopBarProps> = ({
-  currentSymbol,
-  category,
-  symbolType,
-  timeframe,
-  onTimeframeChange,
-  onOpenSearch,
-  activeTab,
-  onTabChange,
-  showSubChart,
-  onToggleSubChart,
-  showWatchlist,
-  onToggleWatchlist,
-}) => {
   return (
     <header className="topbar">
       <div className="topbar-left">
         {/* Symbol Search Trigger Button */}
-        <button className="symbol-button" onClick={onOpenSearch} title="Buscar activo (Ctrl + K)">
+        <button className="symbol-button" onClick={openSearch} title="Buscar activo (Ctrl + K)">
           <Search size={15} color="var(--text-secondary)" />
-          <span className="symbol-name">{currentSymbol}</span>
+          <span className="symbol-name">{activeSymbol}</span>
           <span className="symbol-category-badge">{category}</span>
-          {symbolType && symbolType !== 'uncategorized' && (
-            <span className="symbol-type-badge">{symbolType}</span>
+          {activeInstrument?.symbol_type && activeInstrument.symbol_type !== 'uncategorized' && (
+            <span className={`badge-type-label ${activeInstrument.symbol_type.toLowerCase()}`}>
+              {activeInstrument.symbol_type}
+            </span>
           )}
         </button>
 
@@ -64,7 +51,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               <button
                 key={tf.value}
                 className={`tf-btn ${timeframe === tf.value ? 'active' : ''}`}
-                onClick={() => onTimeframeChange(tf.value)}
+                onClick={() => setTimeframe(tf.value)}
                 title={tf.description}
               >
                 {tf.label}
@@ -79,7 +66,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {activeTab === 'chart' && (
           <button
             className={`tab-btn ${showSubChart ? 'active' : ''}`}
-            onClick={onToggleSubChart}
+            onClick={toggleSubChart}
             title="Mostrar / Ocultar Subgráfico de Funding Rate"
           >
             <Activity size={14} color={showSubChart ? 'var(--accent-blue)' : 'var(--text-secondary)'} />
@@ -93,7 +80,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <nav className="topbar-tabs">
           <button
             className={`tab-btn ${activeTab === 'chart' ? 'active' : ''}`}
-            onClick={() => onTabChange('chart')}
+            onClick={() => setActiveTab('chart')}
           >
             <CandlestickChart size={14} />
             <span>Gráfico</span>
@@ -101,7 +88,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           <button
             className={`tab-btn ${activeTab === 'compare' ? 'active' : ''}`}
-            onClick={() => onTabChange('compare')}
+            onClick={() => setActiveTab('compare')}
             title="Superponer y comparar Funding Rates entre varios activos"
           >
             <LineChart size={14} />
@@ -110,8 +97,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           <button
             className={`tab-btn ${activeTab === 'scanner' ? 'active' : ''}`}
-            onClick={() => onTabChange('scanner')}
-            title="Escaner de oportunidades de Funding Rate y APR"
+            onClick={() => setActiveTab('scanner')}
+            title="Escáner de oportunidades de Funding Rate y APR"
           >
             <TableProperties size={14} />
             <span>Funding Scanner</span>
@@ -119,7 +106,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         </nav>
 
         <button
-          onClick={onToggleWatchlist}
+          onClick={toggleWatchlist}
           className={`tab-btn ${showWatchlist ? 'active' : ''}`}
           title={showWatchlist ? 'Ocultar Watchlist' : 'Mostrar Watchlist'}
         >

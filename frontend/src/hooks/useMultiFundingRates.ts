@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchFundingRateHistory } from '../services/api';
-import { OVERLAY_LINE_COLORS } from '../constants/theme';
-import type { BybitCategory, CompareSeriesItem } from '../types';
+import type { BybitCategory, CompareItemState, CompareSeriesItem, FundingRatePoint } from '../types';
 
 export function useMultiFundingRates(
-  symbols: string[],
+  items: CompareItemState[],
   category: BybitCategory = 'linear'
 ) {
   const [seriesList, setSeriesList] = useState<CompareSeriesItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const cacheRef = useRef<Map<string, FundingRatePoint[]>>(new Map());
 
   useEffect(() => {
-    if (!symbols || symbols.length === 0) {
+    if (!items || items.length === 0) {
       setSeriesList([]);
       return;
     }
@@ -19,41 +19,44 @@ export function useMultiFundingRates(
     let isMounted = true;
 
     const loadAll = async () => {
-      setLoading(true);
+      // Find items not in cache
+      const uncached = items.filter((item) => !cacheRef.current.has(item.symbol));
 
-      const promises = symbols.map(async (symbol, index) => {
-        const color = OVERLAY_LINE_COLORS[index % OVERLAY_LINE_COLORS.length];
-        try {
-          const res = await fetchFundingRateHistory(symbol, category, 1000);
-          const data = res.data || [];
-          const lastPoint = data.length > 0 ? data[data.length - 1] : null;
-          const latestPct = lastPoint ? lastPoint.funding_rate_percentage : 0;
-          const latestApr = latestPct * 3 * 365;
+      if (uncached.length > 0) {
+        setLoading(true);
+        const fetchPromises = uncached.map(async (item) => {
+          try {
+            const res = await fetchFundingRateHistory(item.symbol, category, 1000);
+            cacheRef.current.set(item.symbol, res.data || []);
+          } catch (err) {
+            console.error(`Error loading funding for ${item.symbol}:`, err);
+            cacheRef.current.set(item.symbol, []);
+          }
+        });
+        await Promise.all(fetchPromises);
+      }
 
-          return {
-            symbol,
-            color,
-            data,
-            loading: false,
-            latestPct,
-            latestApr,
-          } as CompareSeriesItem;
-        } catch (err) {
-          console.error(`Error loading comparison for ${symbol}:`, err);
-          return {
-            symbol,
-            color,
-            data: [],
-            loading: false,
-          } as CompareSeriesItem;
-        }
+      if (!isMounted) return;
+
+      const builtList: CompareSeriesItem[] = items.map((item) => {
+        const data = cacheRef.current.get(item.symbol) || [];
+        const lastPoint = data.length > 0 ? data[data.length - 1] : null;
+        const latestPct = lastPoint ? lastPoint.funding_rate_percentage : 0;
+        const latestApr = latestPct * 3 * 365;
+
+        return {
+          symbol: item.symbol,
+          color: item.color,
+          visible: item.visible,
+          data,
+          loading: false,
+          latestPct,
+          latestApr,
+        };
       });
 
-      const results = await Promise.all(promises);
-      if (isMounted) {
-        setSeriesList(results);
-        setLoading(false);
-      }
+      setSeriesList(builtList);
+      setLoading(false);
     };
 
     loadAll();
@@ -61,7 +64,7 @@ export function useMultiFundingRates(
     return () => {
       isMounted = false;
     };
-  }, [symbols, category]);
+  }, [items, category]);
 
   return { seriesList, loading };
 }

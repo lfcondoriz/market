@@ -1,54 +1,25 @@
 import React, { useState } from 'react';
 import { Search, Bookmark, X } from 'lucide-react';
 import { CATEGORY_FILTERS, type AssetCategoryFilter } from '../../constants/categories';
-import type { InstrumentItem } from '../../types';
+import { useMarket } from '../../context/MarketContext';
+import { WatchlistItem } from './WatchlistItem';
 import { AssetDetailsCard } from './AssetDetailsCard';
 
-interface WatchlistProps {
-  instruments: InstrumentItem[];
-  selectedSymbol: string;
-  onSelectSymbol: (symbol: string) => void;
-  activeInstrument: InstrumentItem | null;
-  loading: boolean;
-  onClose?: () => void;
-}
+export const Watchlist: React.FC = () => {
+  const {
+    activeSymbol,
+    activeInstrument,
+    setActiveSymbol,
+    filterInstruments,
+    loadingInstruments,
+    toggleWatchlist,
+    addCompareSymbol,
+  } = useMarket();
 
-export const Watchlist: React.FC<WatchlistProps> = ({
-  instruments,
-  selectedSymbol,
-  onSelectSymbol,
-  activeInstrument,
-  loading,
-  onClose,
-}) => {
   const [filterType, setFilterType] = useState<AssetCategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filtered = instruments.filter((item) => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      item.symbol.toLowerCase().includes(q) ||
-      (item.base_coin && item.base_coin.toLowerCase().includes(q)) ||
-      (item.display_name && item.display_name.toLowerCase().includes(q));
-
-    if (!matchesSearch) return false;
-
-    const symType = item.symbol_type?.toLowerCase() || '';
-    switch (filterType) {
-      case 'crypto':
-        return !symType || symType === 'uncategorized' || symType === 'innovation';
-      case 'stock':
-        return symType === 'stock';
-      case 'etf':
-        return symType === 'etf';
-      case 'commodity':
-        return symType === 'commodity';
-      case 'all':
-      default:
-        return true;
-    }
-  });
+  const filtered = filterInstruments(searchQuery, filterType);
 
   return (
     <aside className="watchlist-sidebar">
@@ -60,11 +31,13 @@ export const Watchlist: React.FC<WatchlistProps> = ({
           </div>
           <div className="watchlist-header-actions">
             <span className="watchlist-count">{filtered.length} activos</span>
-            {onClose && (
-              <button className="icon-btn" onClick={onClose} title="Ocultar barra lateral">
-                <X size={15} />
-              </button>
-            )}
+            <button
+              className="icon-btn"
+              onClick={toggleWatchlist}
+              title="Ocultar barra lateral"
+            >
+              <X size={15} />
+            </button>
           </div>
         </div>
 
@@ -74,7 +47,7 @@ export const Watchlist: React.FC<WatchlistProps> = ({
           <input
             type="text"
             className="watchlist-search-input"
-            placeholder="Filtrar activos..."
+            placeholder="Filtrar activos (ej. BTC, MARA, ARKK)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -98,48 +71,32 @@ export const Watchlist: React.FC<WatchlistProps> = ({
       <div className="watchlist-table-header">
         <span>SÍMBOLO</span>
         <span className="text-right">TIPO</span>
-        <span className="text-right">CAT</span>
+        <span className="text-right">ACCIÓN</span>
       </div>
 
       {/* Symbol List */}
       <div className="watchlist-list">
-        {loading ? (
+        {loadingInstruments ? (
           <div className="state-center">
             <div className="spinner" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="empty-state-message">No se encontraron activos</div>
         ) : (
-          filtered.map((item) => {
-            const isActive = item.symbol === selectedSymbol;
-            return (
-              <div
-                key={item.symbol}
-                className={`watchlist-row ${isActive ? 'active' : ''}`}
-                onClick={() => onSelectSymbol(item.symbol)}
-              >
-                <div className="col-symbol">
-                  <span className="sym-name">{item.symbol}</span>
-                  <span className="sym-type">{item.display_name || item.base_coin}</span>
-                </div>
-
-                <div className="col-price">
-                  <span className={`badge-type-label ${item.symbol_type ? item.symbol_type.toLowerCase() : ''}`}>
-                    {item.symbol_type || 'Crypto'}
-                  </span>
-                </div>
-
-                <div className="col-change">
-                  <span className="badge-tag badge-cat">{item.category}</span>
-                </div>
-              </div>
-            );
-          })
+          filtered.map((item) => (
+            <WatchlistItem
+              key={item.symbol}
+              item={item}
+              isActive={item.symbol === activeSymbol}
+              onSelect={setActiveSymbol}
+              onAddToCompare={addCompareSymbol}
+            />
+          ))
         )}
       </div>
 
       {/* Bottom Selected Asset Details */}
-      <AssetDetailsCard instrument={activeInstrument} currentSymbol={selectedSymbol} />
+      <AssetDetailsCard instrument={activeInstrument} currentSymbol={activeSymbol} />
     </aside>
   );
 };

@@ -1,68 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, X, TrendingUp } from 'lucide-react';
 import { CATEGORY_FILTERS, type AssetCategoryFilter } from '../../constants/categories';
-import type { InstrumentItem } from '../../types';
+import { useMarket } from '../../context/MarketContext';
 
-interface SearchModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSelectSymbol: (symbol: string) => void;
-  instruments: InstrumentItem[];
-}
-
-export const SearchModal: React.FC<SearchModalProps> = ({
-  isOpen,
-  onClose,
-  onSelectSymbol,
-  instruments,
-}) => {
+export const SearchModal: React.FC = () => {
+  const { isSearchOpen, closeSearch, setActiveSymbol, filterInstruments } = useMarket();
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<AssetCategoryFilter>('all');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isSearchOpen) {
       setQuery('');
       setCategoryFilter('all');
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isOpen]);
+  }, [isSearchOpen]);
 
-  if (!isOpen) return null;
+  if (!isSearchOpen) return null;
 
-  const filtered = instruments
-    .filter((inst) => {
-      const q = query.toLowerCase().trim();
-      const matchesQuery =
-        !q ||
-        inst.symbol.toLowerCase().includes(q) ||
-        (inst.base_coin && inst.base_coin.toLowerCase().includes(q)) ||
-        (inst.display_name && inst.display_name.toLowerCase().includes(q));
-
-      if (!matchesQuery) return false;
-
-      const symType = inst.symbol_type?.toLowerCase() || '';
-      switch (categoryFilter) {
-        case 'crypto':
-          return !symType || symType === 'uncategorized' || symType === 'innovation';
-        case 'stock':
-          return symType === 'stock';
-        case 'etf':
-          return symType === 'etf';
-        case 'commodity':
-          return symType === 'commodity';
-        case 'all':
-        default:
-          return true;
-      }
-    })
-    .slice(0, 40);
+  const filtered = filterInstruments(query, categoryFilter).slice(0, 40);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      onClose();
+      closeSearch();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex((prev) => (prev + 1) % (filtered.length || 1));
@@ -72,14 +35,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (filtered[selectedIndex]) {
-        onSelectSymbol(filtered[selectedIndex].symbol);
-        onClose();
+        setActiveSymbol(filtered[selectedIndex].symbol);
+        closeSearch();
       }
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={closeSearch}>
       <div
         className="search-modal"
         onClick={(e) => e.stopPropagation()}
@@ -98,7 +61,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               setSelectedIndex(0);
             }}
           />
-          <button className="icon-btn" onClick={onClose} title="Cerrar (Esc)">
+          <button className="icon-btn" onClick={closeSearch} title="Cerrar (Esc)">
             <X size={18} />
           </button>
         </div>
@@ -130,8 +93,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 key={inst.symbol}
                 className={`search-result-item ${index === selectedIndex ? 'selected' : ''}`}
                 onClick={() => {
-                  onSelectSymbol(inst.symbol);
-                  onClose();
+                  setActiveSymbol(inst.symbol);
+                  closeSearch();
                 }}
               >
                 <div className="search-item-info">
@@ -148,7 +111,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
                 <div className="search-item-tags">
                   {inst.symbol_type && (
-                    <span className="badge-tag badge-type">{inst.symbol_type}</span>
+                    <span className={`badge-type-label ${inst.symbol_type.toLowerCase()}`}>
+                      {inst.symbol_type}
+                    </span>
                   )}
                   <span className="badge-tag badge-cat">{inst.category}</span>
                 </div>

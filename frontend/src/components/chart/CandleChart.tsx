@@ -1,39 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  createChart,
   CandlestickSeries,
   HistogramSeries,
-  ColorType,
-  CrosshairMode,
-  type IChartApi,
   type ISeriesApi,
   type LogicalRange,
 } from 'lightweight-charts';
 import { AlertCircle } from 'lucide-react';
+import { useLightweightChart } from '../../hooks/useLightweightChart';
+import { useMarket } from '../../context/MarketContext';
 import { formatPrice, formatCompactVolume } from '../../utils/formatters';
-import type { KlinePoint, Timeframe } from '../../types';
+import type { KlinePoint } from '../../types';
 
 interface CandleChartProps {
-  symbol: string;
-  category: string;
-  timeframe: Timeframe;
   data: KlinePoint[];
   loading: boolean;
   onLogicalRangeChange?: (range: LogicalRange | null) => void;
 }
 
 export const CandleChart: React.FC<CandleChartProps> = ({
-  symbol,
-  category,
-  timeframe,
   data,
   loading,
   onLogicalRangeChange,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const { activeSymbol, category, timeframe, setActiveSymbol } = useMarket();
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Floating OHLC Legend State
   const [legendData, setLegendData] = useState<{
@@ -46,42 +36,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     changePct: number;
   } | null>(null);
 
-  // Initialize Chart
-  useEffect(() => {
-    if (!containerRef.current) return;
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#131722' },
-        textColor: '#787b86',
-        fontSize: 11,
-        fontFamily: "'Inter', sans-serif",
-      },
-      grid: {
-        vertLines: { color: 'rgba(42, 46, 57, 0.4)' },
-        horzLines: { color: 'rgba(42, 46, 57, 0.4)' },
-      },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: {
-          color: '#758696',
-          width: 1,
-          style: 3,
-          labelBackgroundColor: '#2a2e39',
-        },
-        horzLine: {
-          color: '#758696',
-          width: 1,
-          style: 3,
-          labelBackgroundColor: '#2a2e39',
-        },
-      },
+  const { containerRef, chartRef, isReady, fitContent } = useLightweightChart({
+    customOptions: {
       rightPriceScale: {
         borderColor: '#2a2e39',
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.2,
-        },
+        scaleMargins: { top: 0.1, bottom: 0.2 },
         autoScale: true,
       },
       timeScale: {
@@ -90,12 +52,15 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         secondsVisible: false,
         rightOffset: 8,
       },
-      handleScale: {
-        axisPressedMouseMove: true,
-      },
-    });
+    },
+    onLogicalRangeChange,
+  });
 
-    // Candlestick Series
+  // Attach Candlestick & Volume series when chart is ready
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !isReady) return;
+
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#089981',
       downColor: '#f23645',
@@ -104,92 +69,56 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       wickDownColor: '#f23645',
     });
 
-    // Volume Histogram Series (overlay at bottom)
     const volumeSeries = chart.addSeries(HistogramSeries, {
       color: '#26a69a',
-      priceFormat: {
-        type: 'volume',
-      },
+      priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     });
 
     chart.priceScale('volume').applyOptions({
-      scaleMargins: {
-        top: 0.82,
-        bottom: 0,
-      },
+      scaleMargins: { top: 0.82, bottom: 0 },
     });
 
-    chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
 
-    // Crosshair move handler for floating legend
+    // Crosshair move handler
     chart.subscribeCrosshairMove((param) => {
-      if (
-        !param ||
-        !param.time ||
-        !param.seriesData ||
-        !candleSeriesRef.current ||
-        !volumeSeriesRef.current
-      ) {
-        return;
-      }
+      if (!param || !param.time || !param.seriesData) return;
 
-      const candleData = param.seriesData.get(candleSeriesRef.current) as {
+      const cData = param.seriesData.get(candleSeries) as {
         open: number;
         high: number;
         low: number;
         close: number;
       } | undefined;
 
-      const volData = param.seriesData.get(volumeSeriesRef.current) as {
-        value: number;
-      } | undefined;
+      const vData = param.seriesData.get(volumeSeries) as { value: number } | undefined;
 
-      if (candleData) {
-        const change = candleData.close - candleData.open;
-        const changePct = candleData.open !== 0 ? (change / candleData.open) * 100 : 0;
+      if (cData) {
+        const change = cData.close - cData.open;
+        const changePct = cData.open !== 0 ? (change / cData.open) * 100 : 0;
         setLegendData({
-          open: candleData.open,
-          high: candleData.high,
-          low: candleData.low,
-          close: candleData.close,
-          volume: volData?.value || 0,
+          open: cData.open,
+          high: cData.high,
+          low: cData.low,
+          close: cData.close,
+          volume: vData?.value || 0,
           change,
           changePct,
         });
       }
     });
 
-    // Sync time range if needed
-    if (onLogicalRangeChange) {
-      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        onLogicalRangeChange(range);
-      });
-    }
-
-    // Resize Observer for fluid responsiveness
-    const resizeObserver = new ResizeObserver((entries) => {
-      if (!entries || entries.length === 0) return;
-      const { width, height } = entries[0].contentRect;
-      chart.applyOptions({ width, height });
-    });
-
-    resizeObserver.observe(containerRef.current);
-
     return () => {
-      resizeObserver.disconnect();
-      chart.remove();
-      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
     };
-  }, []);
+  }, [isReady]);
 
-  // Update Series Data when data prop changes
+  // Update Data
   useEffect(() => {
-    if (!candleSeriesRef.current || !volumeSeriesRef.current) {
-      return;
-    }
+    if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
 
     if (!data || data.length === 0) {
       candleSeriesRef.current.setData([]);
@@ -198,7 +127,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       return;
     }
 
-    // Format Candlestick Data
     const formattedCandles = data.map((d) => ({
       time: d.time as any,
       open: d.open,
@@ -207,7 +135,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       close: d.close,
     }));
 
-    // Format Volume Data with dynamic color matching candle
     const formattedVolume = data.map((d) => ({
       time: d.time as any,
       value: d.volume,
@@ -217,7 +144,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     candleSeriesRef.current.setData(formattedCandles);
     volumeSeriesRef.current.setData(formattedVolume);
 
-    // Default legend to latest candle
     const last = data[data.length - 1];
     if (last) {
       const change = last.close - last.open;
@@ -233,15 +159,42 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       });
     }
 
-    chartRef.current?.timeScale().fitContent();
-  }, [data]);
+    fitContent();
+  }, [data, fitContent]);
+
+  // Drag and Drop Handling (Dropping an asset onto the chart switches the symbol)
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const droppedSymbol =
+      e.dataTransfer.getData('application/market-symbol') ||
+      e.dataTransfer.getData('text/plain');
+    if (droppedSymbol) {
+      setActiveSymbol(droppedSymbol.trim());
+    }
+  };
 
   return (
-    <div className="chart-viewport-container">
+    <div
+      className={`chart-viewport-container ${isDragOver ? 'drag-over' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Floating TradingView-style Legend */}
       <div className="chart-legend">
         <div className="legend-title">
-          <span className="legend-symbol">{symbol}</span>
+          <span className="legend-symbol">{activeSymbol}</span>
           <span className="legend-desc">{timeframe} • Bybit</span>
         </div>
 
@@ -280,18 +233,25 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </div>
       )}
 
+      {/* Drag & Drop Visual Indicator */}
+      {isDragOver && (
+        <div className="chart-drop-overlay">
+          <div className="drop-indicator-badge">Soltar para abrir {activeSymbol}</div>
+        </div>
+      )}
+
       {/* Empty Data Banner */}
       {!loading && (!data || data.length === 0) && (
         <div className="empty-chart-banner">
           <AlertCircle size={36} color="var(--accent-amber)" />
           <div className="empty-chart-title">
-            No hay velas almacenadas para {symbol} (Intervalo: {timeframe})
+            No hay velas almacenadas para {activeSymbol} (Intervalo: {timeframe})
           </div>
           <div className="empty-chart-subtitle">
             Para sincronizar este activo en tu base de datos local, ejecuta:
           </div>
           <code className="empty-chart-command">
-            uv run market klines --category {category} --symbol {symbol} --interval {timeframe}
+            uv run market klines --category {category} --symbol {activeSymbol} --interval {timeframe}
           </code>
         </div>
       )}

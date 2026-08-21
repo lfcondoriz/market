@@ -8,29 +8,21 @@ import {
   type ISeriesApi,
 } from 'lightweight-charts';
 import { X, TrendingUp, Maximize2, Minimize2, Calendar } from 'lucide-react';
+import { useMarket } from '../../context/MarketContext';
 import { isWeekendTimestamp, formatFundingPct } from '../../utils/formatters';
 import type { FundingRatePoint } from '../../types';
 
 interface SubChartPaneProps {
-  symbol: string;
   data: FundingRatePoint[];
   loading: boolean;
-  onClose: () => void;
-  height?: number;
-  onHeightChange?: (height: number) => void;
 }
 
 const DEFAULT_HEIGHT = 190;
 const MIN_HEIGHT = 90;
 
-export const SubChartPane: React.FC<SubChartPaneProps> = ({
-  symbol,
-  data,
-  loading,
-  onClose,
-  height = DEFAULT_HEIGHT,
-  onHeightChange,
-}) => {
+export const SubChartPane: React.FC<SubChartPaneProps> = ({ data, loading }) => {
+  const { activeSymbol, toggleSubChart, subChartHeight, setSubChartHeight } = useMarket();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const areaSeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
@@ -39,7 +31,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [highlightWeekends, setHighlightWeekends] = useState(true);
-  const prevHeightRef = useRef(height);
+  const prevHeightRef = useRef(subChartHeight);
 
   // Resize Drag Handling
   const handleMouseDown = useCallback(
@@ -48,15 +40,13 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       setIsDragging(true);
 
       const startY = e.clientY;
-      const startHeight = height;
+      const startHeight = subChartHeight;
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const deltaY = startY - moveEvent.clientY;
         const maxHeight = window.innerHeight * 0.75;
         const newHeight = Math.max(MIN_HEIGHT, Math.min(maxHeight, startHeight + deltaY));
-        if (onHeightChange) {
-          onHeightChange(newHeight);
-        }
+        setSubChartHeight(newHeight);
       };
 
       const handleMouseUp = () => {
@@ -72,21 +62,19 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [height, onHeightChange]
+    [subChartHeight, setSubChartHeight]
   );
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       const startY = e.touches[0].clientY;
-      const startHeight = height;
+      const startHeight = subChartHeight;
 
       const handleTouchMove = (moveEvent: TouchEvent) => {
         const deltaY = startY - moveEvent.touches[0].clientY;
         const maxHeight = window.innerHeight * 0.75;
         const newHeight = Math.max(MIN_HEIGHT, Math.min(maxHeight, startHeight + deltaY));
-        if (onHeightChange) {
-          onHeightChange(newHeight);
-        }
+        setSubChartHeight(newHeight);
       };
 
       const handleTouchEnd = () => {
@@ -97,23 +85,20 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       window.addEventListener('touchmove', handleTouchMove);
       window.addEventListener('touchend', handleTouchEnd);
     },
-    [height, onHeightChange]
+    [subChartHeight, setSubChartHeight]
   );
 
   const handleDoubleClick = () => {
-    if (onHeightChange) {
-      onHeightChange(DEFAULT_HEIGHT);
-    }
+    setSubChartHeight(DEFAULT_HEIGHT);
   };
 
   const toggleExpand = () => {
-    if (!onHeightChange) return;
     if (isExpanded) {
-      onHeightChange(prevHeightRef.current || DEFAULT_HEIGHT);
+      setSubChartHeight(prevHeightRef.current || DEFAULT_HEIGHT);
       setIsExpanded(false);
     } else {
-      prevHeightRef.current = height;
-      onHeightChange(Math.min(window.innerHeight * 0.5, 360));
+      prevHeightRef.current = subChartHeight;
+      setSubChartHeight(Math.min(window.innerHeight * 0.5, 360));
       setIsExpanded(true);
     }
   };
@@ -135,10 +120,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       },
       rightPriceScale: {
         borderColor: '#2a2e39',
-        scaleMargins: {
-          top: 0.15,
-          bottom: 0.15,
-        },
+        scaleMargins: { top: 0.15, bottom: 0.15 },
       },
       timeScale: {
         borderColor: '#2a2e39',
@@ -147,7 +129,6 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       },
     });
 
-    // Main continuous area series
     const areaSeries = chart.addSeries(AreaSeries, {
       topColor: 'rgba(41, 98, 255, 0.25)',
       bottomColor: 'rgba(41, 98, 255, 0.01)',
@@ -179,7 +160,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
     };
   }, []);
 
-  // Update Data & Weekend Markers
+  // Update Data & Weekend Markers matching curve color (#2962ff)
   useEffect(() => {
     const series = areaSeriesRef.current;
     if (!series) return;
@@ -222,7 +203,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
   return (
     <div
       className="subpane-container"
-      style={{ height: `${height}px`, minHeight: `${MIN_HEIGHT}px` }}
+      style={{ height: `${subChartHeight}px`, minHeight: `${MIN_HEIGHT}px` }}
     >
       {/* Draggable Splitter Handle */}
       <div
@@ -239,7 +220,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
       <div className="subpane-header">
         <div className="subpane-title-group">
           <TrendingUp size={13} color="var(--accent-blue)" />
-          <span className="subpane-title">Funding Rate ({symbol})</span>
+          <span className="subpane-title">Funding Rate ({activeSymbol})</span>
           {latestRate && (
             <span
               className={`subpane-rate-badge ${latestPct >= 0 ? 'price-up' : 'price-down'}`}
@@ -268,7 +249,7 @@ export const SubChartPane: React.FC<SubChartPaneProps> = ({
             {isExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
 
-          <button className="subpane-btn" onClick={onClose} title="Cerrar subpanel">
+          <button className="subpane-btn" onClick={toggleSubChart} title="Cerrar subpanel">
             <X size={14} />
           </button>
         </div>

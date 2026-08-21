@@ -8,28 +8,40 @@ import {
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { Plus, X, LineChart, Calendar } from 'lucide-react';
+import {
+  Plus,
+  X,
+  LineChart,
+  Calendar,
+  Eye,
+  EyeOff,
+  Layers,
+  Trash2,
+  CheckSquare,
+  Square,
+} from 'lucide-react';
+import { useMarket } from '../../context/MarketContext';
 import { useMultiFundingRates } from '../../hooks/useMultiFundingRates';
 import { formatFundingPct, isWeekendTimestamp } from '../../utils/formatters';
-import type { InstrumentItem } from '../../types';
 
-interface FundingComparatorProps {
-  instruments: InstrumentItem[];
-  selectedSymbols: string[];
-  onSymbolsChange: (symbols: string[]) => void;
-  onSelectSymbolForChart: (symbol: string) => void;
-}
+export const FundingComparator: React.FC = () => {
+  const {
+    compareItems,
+    addCompareSymbol,
+    removeCompareSymbol,
+    toggleCompareVisibility,
+    setAllCompareVisibility,
+    applyCategoryPreset,
+    clearCompare,
+    filterInstruments,
+  } = useMarket();
 
-export const FundingComparator: React.FC<FundingComparatorProps> = ({
-  instruments,
-  selectedSymbols,
-  onSymbolsChange,
-}) => {
   const [searchPicker, setSearchPicker] = useState<string>('');
   const [isPickerOpen, setIsPickerOpen] = useState<boolean>(false);
   const [showWeekendDots, setShowWeekendDots] = useState<boolean>(true);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
-  const { seriesList, loading } = useMultiFundingRates(selectedSymbols, 'linear');
+  const { seriesList, loading } = useMultiFundingRates(compareItems, 'linear');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -45,7 +57,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
         background: { type: ColorType.Solid, color: '#131722' },
         textColor: '#787b86',
         fontSize: 11,
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       },
       grid: {
         vertLines: { color: 'rgba(42, 46, 57, 0.4)' },
@@ -68,10 +80,8 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
       },
       rightPriceScale: {
         borderColor: '#2a2e39',
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
-        },
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+        autoScale: true,
       },
       timeScale: {
         borderColor: '#2a2e39',
@@ -99,7 +109,7 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
     };
   }, []);
 
-  // Update Series when multi-funding data or weekend toggle updates
+  // Update Series when multi-funding data, visibility or weekend toggle updates
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -107,17 +117,17 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
     const currentMap = lineSeriesMapRef.current;
     const currentMarkersMap = markersMapRef.current;
 
-    // 1. Remove series that are no longer in selectedSymbols
-    const activeSet = new Set(selectedSymbols);
+    // 1. Remove series that are no longer in compareItems
+    const activeSymbols = new Set(compareItems.map((i) => i.symbol));
     for (const [sym, series] of currentMap.entries()) {
-      if (!activeSet.has(sym)) {
+      if (!activeSymbols.has(sym)) {
         chart.removeSeries(series);
         currentMap.delete(sym);
         currentMarkersMap.delete(sym);
       }
     }
 
-    // 2. Add or update series for each selected item
+    // 2. Add or update series for each item
     seriesList.forEach((item) => {
       let series = currentMap.get(item.symbol);
       let markers = currentMarkersMap.get(item.symbol);
@@ -136,6 +146,12 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
         currentMarkersMap.set(item.symbol, markers);
       }
 
+      // Dynamic Visibility Toggle
+      series.applyOptions({
+        visible: item.visible,
+        color: item.color,
+      });
+
       const formattedData = item.data.map((d) => ({
         time: d.time as any,
         value: d.funding_rate_percentage,
@@ -143,8 +159,8 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
 
       series.setData(formattedData);
 
-      // Clean, un-cluttered Weekend Markers matching each curve's own color
-      if (showWeekendDots && item.data.length > 0 && markers) {
+      // Clean Weekend Markers (matching each curve's color)
+      if (item.visible && showWeekendDots && item.data.length > 0 && markers) {
         const weekendMarkers = item.data
           .filter((d) => isWeekendTimestamp(d.time))
           .map((d) => ({
@@ -161,45 +177,94 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
     });
 
     chart.timeScale().fitContent();
-  }, [seriesList, selectedSymbols, showWeekendDots]);
+  }, [seriesList, compareItems, showWeekendDots]);
 
-  const handleAddSymbol = (symbol: string) => {
-    if (!selectedSymbols.includes(symbol)) {
-      onSymbolsChange([...selectedSymbols, symbol]);
+  // Drag and Drop (Dropping an asset into the comparator adds it)
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const droppedSymbol =
+      e.dataTransfer.getData('application/market-symbol') ||
+      e.dataTransfer.getData('text/plain');
+    if (droppedSymbol) {
+      addCompareSymbol(droppedSymbol.trim());
     }
-    setIsPickerOpen(false);
-    setSearchPicker('');
   };
 
-  const handleRemoveSymbol = (symbol: string) => {
-    onSymbolsChange(selectedSymbols.filter((s) => s !== symbol));
-  };
-
-  const availableInstruments = instruments
-    .filter(
-      (inst) =>
-        !selectedSymbols.includes(inst.symbol) &&
-        (inst.symbol.toLowerCase().includes(searchPicker.toLowerCase()) ||
-          (inst.display_name && inst.display_name.toLowerCase().includes(searchPicker.toLowerCase())))
-    )
+  const availableInstruments = filterInstruments(searchPicker, 'all')
+    .filter((inst) => !compareItems.some((i) => i.symbol === inst.symbol))
     .slice(0, 20);
 
+  const allVisible = compareItems.length > 0 && compareItems.every((i) => i.visible);
+
   return (
-    <div className="compare-workspace">
+    <div
+      className={`compare-workspace ${isDragOver ? 'drag-over' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Top Controls & Legend Bar */}
       <div className="compare-header">
         <div className="compare-title-row">
           <div className="compare-title">
             <LineChart size={16} color="var(--accent-blue)" />
             <span>Comparador Superpuesto de Funding Rates</span>
+            <span className="watchlist-count">({compareItems.length} activos)</span>
           </div>
 
           <div className="compare-actions">
+            {/* Presets dropdown / group */}
+            <div className="preset-group">
+              <span className="preset-label">Presets:</span>
+              <button
+                className="chip-btn"
+                onClick={() => applyCategoryPreset('crypto')}
+                title="Cargar principales criptomonedas"
+              >
+                Top Crypto
+              </button>
+              <button
+                className="chip-btn"
+                onClick={() => applyCategoryPreset('etf')}
+                title="Cargar todos los ETFs"
+              >
+                Todos los ETFs
+              </button>
+              <button
+                className="chip-btn"
+                onClick={() => applyCategoryPreset('stock')}
+                title="Cargar acciones (Stocks)"
+              >
+                Stocks
+              </button>
+            </div>
+
+            {/* Mass visibility toggles */}
+            <button
+              className="chip-btn"
+              onClick={() => setAllCompareVisibility(!allVisible)}
+              title={allVisible ? 'Ocultar todas las líneas' : 'Mostrar todas las líneas'}
+            >
+              {allVisible ? <Square size={13} /> : <CheckSquare size={13} />}
+              <span>{allVisible ? 'Ocultar Todo' : 'Mostrar Todo'}</span>
+            </button>
+
             {/* Toggle Weekend Dot Markers */}
             <button
               className={`chip-btn ${showWeekendDots ? 'active' : ''}`}
               onClick={() => setShowWeekendDots((prev) => !prev)}
-              title="Resaltar registros de fin de semana con puntos discretos (Sábado y Domingo)"
+              title="Resaltar registros de fin de semana con puntos del color de cada curva (Sábado y Domingo)"
             >
               <Calendar size={13} />
               <span>Marcadores Fin de Semana (●)</span>
@@ -234,10 +299,18 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
                         <div
                           key={inst.symbol}
                           className="picker-item"
-                          onClick={() => handleAddSymbol(inst.symbol)}
+                          onClick={() => {
+                            addCompareSymbol(inst.symbol);
+                            setIsPickerOpen(false);
+                            setSearchPicker('');
+                          }}
                         >
                           <span className="picker-item-sym">{inst.symbol}</span>
-                          <span className={`badge-type-label ${inst.symbol_type ? inst.symbol_type.toLowerCase() : ''}`}>
+                          <span
+                            className={`badge-type-label ${
+                              inst.symbol_type ? inst.symbol_type.toLowerCase() : ''
+                            }`}
+                          >
                             {inst.symbol_type || 'Crypto'}
                           </span>
                         </div>
@@ -247,23 +320,55 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
                 </div>
               )}
             </div>
+
+            {compareItems.length > 0 && (
+              <button
+                className="icon-btn"
+                onClick={clearCompare}
+                title="Limpiar todos los activos de la comparación"
+                style={{ padding: '6px' }}
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Multi-Asset Legend Chips */}
+        {/* Multi-Asset Legend Chips with Visibility Toggles */}
         <div className="compare-legend-chips">
           {seriesList.map((item) => (
             <div
               key={item.symbol}
-              className="compare-legend-card"
-              style={{ borderLeft: `3px solid ${item.color}` }}
+              className={`compare-legend-card ${!item.visible ? 'dimmed' : ''}`}
+              style={{
+                borderLeft: `3px solid ${item.visible ? item.color : 'var(--text-muted)'}`,
+              }}
             >
               <div className="legend-sym-row">
-                <span className="legend-sym-name">{item.symbol}</span>
+                <div className="legend-sym-info">
+                  <button
+                    className="legend-eye-btn"
+                    onClick={() => toggleCompareVisibility(item.symbol)}
+                    title={item.visible ? 'Ocultar curva en el gráfico' : 'Mostrar curva en el gráfico'}
+                  >
+                    {item.visible ? (
+                      <Eye size={13} color={item.color} />
+                    ) : (
+                      <EyeOff size={13} color="var(--text-muted)" />
+                    )}
+                  </button>
+                  <span
+                    className="legend-sym-name"
+                    style={{ color: item.visible ? 'var(--text-bright)' : 'var(--text-muted)' }}
+                  >
+                    {item.symbol}
+                  </span>
+                </div>
+
                 <button
                   className="legend-remove-btn"
-                  onClick={() => handleRemoveSymbol(item.symbol)}
-                  title="Quitar activo de la comparación"
+                  onClick={() => removeCompareSymbol(item.symbol)}
+                  title="Quitar de la comparativa"
                 >
                   <X size={12} />
                 </button>
@@ -273,7 +378,11 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
                 <span
                   className="legend-pct"
                   style={{
-                    color: (item.latestPct || 0) >= 0 ? 'var(--bull-green)' : 'var(--bear-red)',
+                    color: !item.visible
+                      ? 'var(--text-muted)'
+                      : (item.latestPct || 0) >= 0
+                      ? 'var(--bull-green)'
+                      : 'var(--bear-red)',
                   }}
                 >
                   {formatFundingPct(item.latestPct)}
@@ -295,6 +404,15 @@ export const FundingComparator: React.FC<FundingComparatorProps> = ({
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
               Superponiendo curvas de funding...
             </span>
+          </div>
+        )}
+
+        {isDragOver && (
+          <div className="chart-drop-overlay">
+            <div className="drop-indicator-badge">
+              <Layers size={16} />
+              <span>Soltar para superponer activo</span>
+            </div>
           </div>
         )}
 
