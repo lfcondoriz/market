@@ -10,6 +10,7 @@ from app.repositories.instruments_repository import count_instruments
 logger = logging.getLogger(__name__)
 
 SYMBOL_TYPES = [
+    "ETF",
     "innovation",
     "stock",
     "commodity",
